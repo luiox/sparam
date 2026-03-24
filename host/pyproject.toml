@@ -1,0 +1,21 @@
+[project]
+name = "sparam"
+version = "0.1.0"
+description = "Simple parameter monitoring and calibration tool for MCU"
+readme = "README.md"
+requires-python = ">=3.8"
+dependencies = [
+    "pyserial>=3.5",
+    "pyelftools>=0.29",
+    "click>=8.0",
+]
+
+[project.optional-dependencies]
+gui = ["PyQt6>=6.4"]
+
+[project.scripts]
+sparam = "cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
