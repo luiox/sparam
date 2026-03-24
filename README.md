@@ -19,8 +19,13 @@ sparam/
 │   ├── sparam.h           # 公开API
 │   ├── sparam_hal.h       # HAL抽象层
 │   ├── sparam_port.h      # 配置文件
-│   └── stm32/             # STM32参考实现
-└── host/                   # 上位机工具（待实现）
+├── demo/                   # 平台示例工程
+│   └── stm32/
+│       └── sparam_stm32.c # STM32 HAL参考实现
+└── host/                   # 上位机工具
+	├── sparam/            # 协议、连接和设备抽象
+	├── tests/             # 本地socket模拟测试
+	└── cli.py             # CLI入口
 ```
 
 ## 快速开始

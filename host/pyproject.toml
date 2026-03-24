@@ -8,10 +8,12 @@ dependencies = [
     "pyserial>=3.5",
     "pyelftools>=0.29",
     "click>=8.0",
+    "crcmod>=1.7",
 ]
 
 [project.optional-dependencies]
 gui = ["PyQt6>=6.4"]
+test = ["pytest>=8.0"]
 
 [project.scripts]
 sparam = "cli:main"

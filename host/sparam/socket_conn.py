@@ -1,41 +1,29 @@
-from typing import Optional, Callable, List
+from typing import Optional, Callable
 from threading import Thread, Event
+import socket
 import time
-
-try:
-    import serial
-    import serial.tools.list_ports
-except ImportError:
-    raise ImportError("pyserial is required: pip install pyserial")
 
 from .protocol import Protocol, Frame
 
 
-class SerialConnection:
-    def __init__(self, port: str, baudrate: int = 115200, timeout: float = 1.0):
+class SocketConnection:
+    def __init__(self, host: str, port: int, timeout: float = 1.0):
+        self.host = host
         self.port = port
-        self.baudrate = baudrate
         self.timeout = timeout
-        self._serial: Optional[serial.Serial] = None
+        self._sock: Optional[socket.socket] = None
         self._rx_thread: Optional[Thread] = None
         self._stop_event = Event()
         self._on_frame: Optional[Callable[[Frame], None]] = None
         self._rx_buffer = bytearray()
 
-    @staticmethod
-    def list_ports() -> List[str]:
-        ports = serial.tools.list_ports.comports()
-        return [p.device for p in ports]
-
     def open(self) -> bool:
         try:
-            self._serial = serial.Serial(
-                port=self.port,
-                baudrate=self.baudrate,
-                timeout=self.timeout,
-            )
+            self._sock = socket.create_connection((self.host, self.port), timeout=self.timeout)
+            self._sock.settimeout(0.2)
             return True
-        except serial.SerialException:
+        except OSError:
+            self._sock = None
             return False
 
     def close(self):
@@ -44,30 +32,36 @@ class SerialConnection:
             self._rx_thread.join(timeout=1.0)
             self._rx_thread = None
 
-        if self._serial and self._serial.is_open:
-            self._serial.close()
-            self._serial = None
+        if self._sock:
+            try:
+                self._sock.close()
+            finally:
+                self._sock = None
 
     def is_open(self) -> bool:
-        return self._serial is not None and self._serial.is_open
+        return self._sock is not None
 
     def send(self, data: bytes) -> bool:
-        if not self.is_open():
+        if not self._sock:
             return False
+
         try:
-            self._serial.write(data)
+            self._sock.sendall(data)
             return True
-        except serial.SerialException:
+        except OSError:
             return False
 
     def _receive_loop(self):
-        while not self._stop_event.is_set() and self._serial:
+        while not self._stop_event.is_set() and self._sock:
             try:
-                data = self._serial.read(64)
-                if data:
-                    self._rx_buffer.extend(data)
-                    self._try_parse_frames()
-            except serial.SerialException:
+                data = self._sock.recv(256)
+                if not data:
+                    break
+                self._rx_buffer.extend(data)
+                self._try_parse_frames()
+            except socket.timeout:
+                continue
+            except OSError:
                 break
 
     def _try_parse_frames(self):
@@ -81,7 +75,6 @@ class SerialConnection:
 
             length = self._rx_buffer[2]
             total_len = 3 + length
-
             if len(self._rx_buffer) < total_len:
                 break
 
@@ -114,7 +107,24 @@ class SerialConnection:
             self._on_frame = old_callback
             return None
 
-        event.wait(timeout)
+        end_time = time.monotonic() + timeout
+        while result is None and time.monotonic() < end_time:
+            try:
+                if not self._sock:
+                    break
+                data_chunk = self._sock.recv(256)
+                if not data_chunk:
+                    break
+                self._rx_buffer.extend(data_chunk)
+                self._try_parse_frames()
+            except socket.timeout:
+                pass
+            except OSError:
+                break
+
+            if event.is_set():
+                break
+
         self._on_frame = old_callback
         return result
 

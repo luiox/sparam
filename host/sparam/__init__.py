@@ -1,6 +1,7 @@
 from .protocol import Protocol, CommandType, DataType, ErrorCode
 from .elf_parser import ElfParser
 from .serial_conn import SerialConnection
+from .socket_conn import SocketConnection
 from .device import Device, Variable
 
 __all__ = [
@@ -10,6 +11,7 @@ __all__ = [
     "ErrorCode",
     "ElfParser",
     "SerialConnection",
+    "SocketConnection",
     "Device",
     "Variable",
 ]

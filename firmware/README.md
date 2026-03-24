@@ -7,9 +7,7 @@ firmware/
 ├── sparam.h           # 公开API头文件
 ├── sparam.c           # 核心实现
 ├── sparam_hal.h       # HAL抽象层接口定义
-├── sparam_port.h      # 用户配置文件
-└── stm32/
-    └── sparam_stm32.c # STM32 HAL适配层参考实现
+└── sparam_port.h      # 用户配置文件
 ```
 
 ## 集成步骤
@@ -41,7 +39,7 @@ firmware/
 void sparam_uart_send(uint8_t *data, uint16_t len);
 ```
 
-该函数负责通过串口DMA发送数据。STM32参考实现见 `stm32/sparam_stm32.c`。
+该函数负责通过串口DMA发送数据。STM32参考实现见 `../demo/stm32/sparam_stm32.c`。
 
 ### 4. 调用API
 
