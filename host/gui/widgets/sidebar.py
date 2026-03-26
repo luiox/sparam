@@ -34,11 +34,11 @@ class Sidebar(QFrame):
     def __init__(self) -> None:
         super().__init__()
         self.setObjectName("sidebar")
-        self.setFixedWidth(258)
+        self.setFixedWidth(232)
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(14, 14, 14, 14)
-        layout.setSpacing(12)
+        layout.setContentsMargins(12, 12, 12, 12)
+        layout.setSpacing(10)
 
         layout.addWidget(self._build_connection_section())
         layout.addWidget(self._build_monitor_section())
@@ -60,7 +60,7 @@ class Sidebar(QFrame):
         self.connect_btn = QPushButton("Connect")
         self.connect_btn.setProperty("accent", True)
         self.refresh_btn = QPushButton("Refresh")
-        self.load_symbols_btn = QPushButton("Symbols")
+        self.load_symbols_btn = QPushButton("Load Symbols")
 
         self.connect_btn.clicked.connect(self.connect_requested.emit)
         self.refresh_btn.clicked.connect(self.refresh_requested.emit)
@@ -118,7 +118,7 @@ class Sidebar(QFrame):
         section = self._section_shell("Variables")
         body = self._section_body(section)
 
-        helper = QLabel("Double-click to pin a symbol into the board.")
+        helper = QLabel("Double-click to pin a signal into the live canvas.")
         helper.setProperty("muted", True)
         self.filter_edit = QLineEdit()
         self.filter_edit.setPlaceholderText("Search variables")
@@ -139,15 +139,15 @@ class Sidebar(QFrame):
         shell = QFrame()
         shell.setObjectName("sectionCard")
         outer = QVBoxLayout(shell)
-        outer.setContentsMargins(12, 12, 12, 12)
-        outer.setSpacing(10)
+        outer.setContentsMargins(10, 10, 10, 10)
+        outer.setSpacing(8)
 
         header = QLabel(title)
         header.setProperty("sectionTitle", True)
         content = QWidget()
         content_layout = QVBoxLayout(content)
         content_layout.setContentsMargins(0, 0, 0, 0)
-        content_layout.setSpacing(8)
+        content_layout.setSpacing(7)
 
         outer.addWidget(header)
         outer.addWidget(content)
@@ -167,7 +167,7 @@ class Sidebar(QFrame):
         wrap = QWidget()
         layout = QVBoxLayout(wrap)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(4)
+        layout.setSpacing(3)
         caption = QLabel(label)
         caption.setProperty("muted", True)
         layout.addWidget(caption)

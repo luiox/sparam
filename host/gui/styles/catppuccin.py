@@ -1,47 +1,66 @@
-BACKGROUND = "#f3f4f6"
-SIDEBAR = "#f8fafc"
-CARD = "#fcfcfd"
-CARD_ALT = "#f8fafc"
-INPUT_BG = "#f8fafb"
-BORDER = "#e5e7eb"
-TEXT = "#111827"
-MUTED = "#6b7280"
-ACCENT = "#1f2937"
-SUCCESS = "#4b7a5a"
-WARNING = "#9a6b16"
-ERROR = "#b25d5d"
+PAGE_BG = "#f2f1ee"
+SHELL_BG = "#ebe8e2"
+PANEL_BG = "#f7f5f1"
+CARD_BG = "#fbfaf7"
+INPUT_BG = "#f1eee8"
+BORDER = "#ddd7ce"
+BORDER_STRONG = "#cbc3b7"
+TEXT = "#28241f"
+MUTED = "#777064"
+ACCENT = "#2f2b27"
+ACCENT_SOFT = "#e7e2d8"
+SUCCESS = "#5d8a68"
+WARNING = "#a07b32"
+ERROR = "#b86a63"
 
 SERIES_COLORS = [
     "#2563eb",
     "#0f766e",
-    "#7c3aed",
-    "#ea580c",
-    "#dc2626",
+    "#8b5cf6",
+    "#c97a2b",
+    "#4b5563",
 ]
 
 
 def build_stylesheet() -> str:
     return f"""
     QWidget {{
-        background: {BACKGROUND};
+        background: {PAGE_BG};
         color: {TEXT};
         font-family: Monospace;
-        font-size: 13px;
+        font-size: 12px;
     }}
     QMainWindow {{
-        background: {BACKGROUND};
+        background: {PAGE_BG};
     }}
-    QFrame#toolbar,
-    QFrame#sidebar,
+    QWidget#workspaceShell {{
+        background: transparent;
+    }}
+    QFrame#toolbar {{
+        background: {PANEL_BG};
+        border: 1px solid {BORDER};
+        border-radius: 14px;
+    }}
+    QFrame#sidebar {{
+        background: {SHELL_BG};
+        border: 1px solid {BORDER};
+        border-radius: 16px;
+    }}
     QFrame#sectionCard,
     QFrame#summaryCard,
+    QFrame#signalStatsStrip,
+    QFrame#inspectorPanel,
     QWidget#plotPanel,
-    QFrame#cardShelf,
     QFrame#valueCard,
     QFrame#logPanel {{
-        background: {CARD};
+        background: {PANEL_BG};
         border: 1px solid {BORDER};
-        border-radius: 8px;
+        border-radius: 14px;
+    }}
+    QFrame#summaryCard,
+    QFrame#logPanel,
+    QFrame#valueCard {{
+        background: {CARD_BG};
     }}
     QListWidget,
     QLineEdit,
@@ -52,83 +71,98 @@ def build_stylesheet() -> str:
         background: {INPUT_BG};
         color: {TEXT};
         border: 1px solid {BORDER};
-        border-radius: 6px;
+        border-radius: 10px;
         padding: 7px 10px;
     }}
+    QLineEdit,
+    QComboBox,
+    QSpinBox {{
+        min-height: 18px;
+    }}
+    QPushButton {{
+        font-weight: 600;
+    }}
     QPushButton:hover {{
-        background: {CARD_ALT};
-        border-color: #d1d5db;
+        background: {CARD_BG};
+        border-color: {BORDER_STRONG};
     }}
     QPushButton[accent="true"] {{
         background: {ACCENT};
-        color: {CARD};
+        color: {CARD_BG};
         border-color: {ACCENT};
-        font-weight: 700;
     }}
     QPushButton:pressed {{
-        background: #eef2f7;
+        background: {ACCENT_SOFT};
     }}
     QPushButton[accent="true"]:pressed {{
-        background: #374151;
-    }}
-    QPushButton[semantic="success"] {{
-        color: {SUCCESS};
-    }}
-    QPushButton[semantic="warning"] {{
-        color: {WARNING};
-    }}
-    QPushButton[semantic="error"] {{
-        color: {ERROR};
+        background: #1f1c19;
     }}
     QLabel[muted="true"] {{
         color: {MUTED};
     }}
     QLabel[hero="true"] {{
-        font-size: 24px;
+        font-size: 15px;
         font-weight: 700;
-        letter-spacing: 0.5px;
+        letter-spacing: 0.4px;
+    }}
+    QLabel[sectionTitle="true"] {{
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 1.0px;
+        text-transform: uppercase;
+        color: {TEXT};
     }}
     QLabel[chip="true"] {{
         background: {INPUT_BG};
         border: 1px solid {BORDER};
         border-radius: 999px;
         padding: 4px 10px;
-        font-size: 12px;
+        font-size: 11px;
+        font-weight: 700;
     }}
     QLabel[chip="true"][state="connected"] {{
         color: {SUCCESS};
-        border-color: #d6eadc;
+        border-color: #d5dfd6;
+        background: #f3f7f3;
     }}
     QLabel[chip="true"][state="warning"] {{
         color: {WARNING};
-        border-color: #eadcb6;
+        border-color: #e4d8bd;
+        background: #faf6eb;
     }}
-    QLabel[sectionTitle="true"] {{
-        font-size: 12px;
-        font-weight: 700;
-        text-transform: uppercase;
-        letter-spacing: 0.8px;
+    QLabel[chip="true"][state="idle"] {{
+        color: {MUTED};
     }}
-    QListWidget::item:selected {{
-        background: {CARD_ALT};
-        border: 1px solid {BORDER};
-        color: {TEXT};
-        border-radius: 4px;
+    QListWidget {{
+        outline: none;
     }}
     QListWidget::item {{
-        padding: 6px 8px;
+        padding: 8px 8px;
+        border-radius: 8px;
+        margin: 1px 0;
+    }}
+    QListWidget::item:selected {{
+        background: {CARD_BG};
+        border: 1px solid {BORDER};
+        color: {TEXT};
+    }}
+    QTextEdit {{
+        background: transparent;
+        border: none;
     }}
     QScrollArea {{
         border: none;
+        background: transparent;
     }}
     QComboBox::drop-down,
     QSpinBox::up-button,
     QSpinBox::down-button {{
         border: none;
         background: transparent;
+        width: 16px;
     }}
     QSplitter::handle {{
-        background: {BACKGROUND};
+        background: transparent;
         width: 8px;
     }}
     """

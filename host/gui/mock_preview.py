@@ -28,6 +28,7 @@ class MockPreviewController:
     def _setup_window(self) -> None:
         self.window.parser.variables = {item.name: item for item in self.variables}
         self.window.sidebar.set_variables(self.variables)
+        self.window.toolbar.set_preview()
         self.window.toolbar.set_status_text(
             "Mock preview mode: synthetic waveform data"
         )

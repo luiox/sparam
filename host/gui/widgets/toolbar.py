@@ -7,8 +7,8 @@ class Toolbar(QFrame):
         self.setObjectName("toolbar")
 
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(18, 12, 18, 12)
-        layout.setSpacing(16)
+        layout.setContentsMargins(16, 10, 16, 10)
+        layout.setSpacing(14)
 
         brand_wrap = QWidget()
         brand_layout = QHBoxLayout(brand_wrap)
@@ -17,16 +17,19 @@ class Toolbar(QFrame):
 
         self.brand = QLabel("sparam")
         self.brand.setProperty("hero", True)
-        self.caption = QLabel("serial tuning monitor")
+        self.caption = QLabel("minimal signal lab")
         self.caption.setProperty("muted", True)
 
         brand_layout.addWidget(self.brand)
         brand_layout.addWidget(self.caption)
         brand_layout.addStretch(1)
 
-        self.state_chip = QLabel("Idle")
+        self.state_chip = QLabel("Offline")
+        self.state_chip.setProperty("state", "idle")
         self.state_chip.setProperty("chip", True)
-        self.status_label = QLabel("Pick a symbol file and start a monitor session.")
+        self.status_label = QLabel(
+            "Select symbols, arm a monitor stream, inspect response."
+        )
         self.status_label.setProperty("muted", True)
 
         layout.addWidget(brand_wrap, 1)
@@ -52,5 +55,11 @@ class Toolbar(QFrame):
                 self.state_chip.setText("Connected")
             elif current_state == "idle":
                 self.state_chip.setText("Offline")
+        self.style().unpolish(self.state_chip)
+        self.style().polish(self.state_chip)
+
+    def set_preview(self) -> None:
+        self.state_chip.setText("Preview")
+        self.state_chip.setProperty("state", "connected")
         self.style().unpolish(self.state_chip)
         self.style().polish(self.state_chip)

@@ -1,6 +1,6 @@
 from time import strftime
 
-from PySide6.QtWidgets import QFrame, QTextEdit, QVBoxLayout
+from PySide6.QtWidgets import QFrame, QLabel, QTextEdit, QVBoxLayout
 
 
 class LogPanel(QFrame):
@@ -8,7 +8,15 @@ class LogPanel(QFrame):
         super().__init__()
         self.setObjectName("logPanel")
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(12, 12, 12, 12)
+        layout.setContentsMargins(12, 10, 12, 12)
+        layout.setSpacing(8)
+
+        title = QLabel("Activity")
+        title.setProperty("sectionTitle", True)
+        subtitle = QLabel("Recent device, monitor and export events")
+        subtitle.setProperty("muted", True)
+        layout.addWidget(title)
+        layout.addWidget(subtitle)
 
         self.text_edit = QTextEdit()
         self.text_edit.setReadOnly(True)

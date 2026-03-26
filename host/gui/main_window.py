@@ -7,13 +7,11 @@ from PySide6.QtGui import QCloseEvent
 from PySide6.QtWidgets import (
     QFileDialog,
     QFrame,
-    QGridLayout,
     QHBoxLayout,
     QLabel,
     QMainWindow,
     QMessageBox,
     QScrollArea,
-    QSplitter,
     QVBoxLayout,
     QWidget,
 )
@@ -86,14 +84,10 @@ class MainWindow(QMainWindow):
         root = QWidget(self)
         self.setCentralWidget(root)
         layout = QVBoxLayout(root)
-        layout.setContentsMargins(18, 18, 18, 18)
-        layout.setSpacing(14)
+        layout.setContentsMargins(12, 12, 12, 12)
+        layout.setSpacing(10)
 
         self.toolbar = Toolbar()
-
-        splitter = QSplitter(Qt.Orientation.Horizontal)
-        splitter.setChildrenCollapsible(False)
-
         self.sidebar = Sidebar()
         self.sidebar.refresh_requested.connect(self._refresh_ports)
         self.sidebar.connect_requested.connect(self._toggle_connection)
@@ -106,13 +100,56 @@ class MainWindow(QMainWindow):
         self.sidebar.variable_activated.connect(self._toggle_variable_monitor)
         self.sidebar.selection_changed.connect(self._preview_variable)
 
-        main_panel = QWidget()
-        main_layout = QGridLayout(main_panel)
-        main_layout.setContentsMargins(0, 0, 0, 0)
-        main_layout.setHorizontalSpacing(14)
-        main_layout.setVerticalSpacing(14)
+        workspace = QWidget()
+        workspace.setObjectName("workspaceShell")
+        workspace_layout = QHBoxLayout(workspace)
+        workspace_layout.setContentsMargins(0, 0, 0, 0)
+        workspace_layout.setSpacing(10)
+
+        center_column = QWidget()
+        center_layout = QVBoxLayout(center_column)
+        center_layout.setContentsMargins(0, 0, 0, 0)
+        center_layout.setSpacing(10)
 
         self.waveform = WaveformPlot()
+        center_layout.addWidget(self.waveform, 1)
+
+        self.stats_strip = QFrame()
+        self.stats_strip.setObjectName("signalStatsStrip")
+        cards_layout = QVBoxLayout(self.stats_strip)
+        cards_layout.setContentsMargins(12, 10, 12, 12)
+        cards_layout.setSpacing(8)
+
+        stats_title_row = QHBoxLayout()
+        stats_title_row.setContentsMargins(0, 0, 0, 0)
+        stats_title = QLabel("Pinned Signals")
+        stats_title.setProperty("sectionTitle", True)
+        stats_caption = QLabel("Live sample snapshot from the active monitor stream")
+        stats_caption.setProperty("muted", True)
+        stats_title_row.addWidget(stats_title)
+        stats_title_row.addStretch(1)
+        stats_title_row.addWidget(stats_caption)
+        cards_layout.addLayout(stats_title_row)
+
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        scroll_contents = QWidget()
+        self.cards_layout = QHBoxLayout(scroll_contents)
+        self.cards_layout.setContentsMargins(0, 0, 0, 0)
+        self.cards_layout.setSpacing(8)
+        self.cards_layout.addStretch(1)
+        scroll.setWidget(scroll_contents)
+        cards_layout.addWidget(scroll)
+        center_layout.addWidget(self.stats_strip)
+
+        inspector = QFrame()
+        inspector.setObjectName("inspectorPanel")
+        inspector.setFixedWidth(318)
+        inspector_layout = QVBoxLayout(inspector)
+        inspector_layout.setContentsMargins(12, 12, 12, 12)
+        inspector_layout.setSpacing(10)
+
         connection_card, self.connection_fields = self._create_summary_card(
             "Connection Overview",
             "Current transport and symbol source",
@@ -124,47 +161,18 @@ class MainWindow(QMainWindow):
             ["Variables", "Rate", "Window", "Mode"],
         )
 
-        cards_shell = QFrame()
-        cards_shell.setObjectName("cardShelf")
-        cards_layout = QVBoxLayout(cards_shell)
-        cards_layout.setContentsMargins(12, 12, 12, 12)
-        cards_layout.setSpacing(10)
-        cards_title = QLabel("Live Values")
-        cards_title.setProperty("muted", True)
-        cards_layout.addWidget(cards_title)
-
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setFrameShape(QFrame.Shape.NoFrame)
-        scroll_contents = QWidget()
-        self.cards_layout = QHBoxLayout(scroll_contents)
-        self.cards_layout.setContentsMargins(0, 0, 0, 0)
-        self.cards_layout.setSpacing(10)
-        self.cards_layout.addStretch(1)
-        scroll.setWidget(scroll_contents)
-        cards_layout.addWidget(scroll)
-
         self.log_panel = LogPanel()
 
-        main_layout.addWidget(self.waveform, 0, 0, 2, 2)
-        main_layout.addWidget(connection_card, 0, 2)
-        main_layout.addWidget(monitor_card, 1, 2)
-        main_layout.addWidget(cards_shell, 2, 0, 1, 2)
-        main_layout.addWidget(self.log_panel, 2, 2)
-        main_layout.setColumnStretch(0, 3)
-        main_layout.setColumnStretch(1, 2)
-        main_layout.setColumnStretch(2, 2)
-        main_layout.setRowStretch(0, 4)
-        main_layout.setRowStretch(1, 3)
-        main_layout.setRowStretch(2, 2)
+        inspector_layout.addWidget(connection_card)
+        inspector_layout.addWidget(monitor_card)
+        inspector_layout.addWidget(self.log_panel, 1)
 
-        splitter.addWidget(self.sidebar)
-        splitter.addWidget(main_panel)
-        splitter.setStretchFactor(0, 1)
-        splitter.setStretchFactor(1, 4)
+        workspace_layout.addWidget(self.sidebar)
+        workspace_layout.addWidget(center_column, 1)
+        workspace_layout.addWidget(inspector)
 
         layout.addWidget(self.toolbar)
-        layout.addWidget(splitter, 1)
+        layout.addWidget(workspace, 1)
         self._refresh_summary_cards()
 
     def _create_summary_card(
@@ -173,8 +181,8 @@ class MainWindow(QMainWindow):
         card = QFrame()
         card.setObjectName("summaryCard")
         layout = QVBoxLayout(card)
-        layout.setContentsMargins(14, 14, 14, 14)
-        layout.setSpacing(10)
+        layout.setContentsMargins(12, 10, 12, 12)
+        layout.setSpacing(8)
 
         title_label = QLabel(title)
         title_label.setProperty("sectionTitle", True)

@@ -2,7 +2,7 @@ from typing import Dict, List, Optional
 
 import pyqtgraph as pg
 from pyqtgraph.exporters import ImageExporter
-from PySide6.QtWidgets import QVBoxLayout, QWidget
+from PySide6.QtWidgets import QLabel, QVBoxLayout, QWidget
 
 
 class WaveformPlot(QWidget):
@@ -10,18 +10,31 @@ class WaveformPlot(QWidget):
         super().__init__()
         self.setObjectName("plotPanel")
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(12, 12, 12, 12)
+        layout.setContentsMargins(12, 10, 12, 12)
+        layout.setSpacing(8)
+
+        title = QLabel("Signal Canvas")
+        title.setProperty("sectionTitle", True)
+        subtitle = QLabel(
+            "Overlayed monitor stream with a restrained time window and subdued grid"
+        )
+        subtitle.setProperty("muted", True)
+        layout.addWidget(title)
+        layout.addWidget(subtitle)
 
         self.plot_widget = pg.PlotWidget()
-        self.plot_widget.setBackground("#fcfcfd")
-        self.plot_widget.showGrid(x=True, y=True, alpha=0.05)
+        self.plot_widget.setBackground("#fbfaf7")
+        self.plot_widget.showGrid(x=True, y=True, alpha=0.08)
         self.plot_widget.setLabel("left", "Value")
         self.plot_widget.setLabel("bottom", "Time", units="s")
-        self.plot_widget.addLegend(offset=(8, 8))
-        self.plot_widget.getAxis("left").setTextPen("#6b7280")
-        self.plot_widget.getAxis("bottom").setTextPen("#6b7280")
-        self.plot_widget.getAxis("left").setPen("#d1d5db")
-        self.plot_widget.getAxis("bottom").setPen("#d1d5db")
+        self.plot_widget.setMenuEnabled(False)
+        self.plot_widget.hideButtons()
+        self.plot_widget.addLegend(offset=(10, 10), labelTextSize="10pt")
+        self.plot_widget.getAxis("left").setTextPen("#777064")
+        self.plot_widget.getAxis("bottom").setTextPen("#777064")
+        self.plot_widget.getAxis("left").setPen("#d7d1c7")
+        self.plot_widget.getAxis("bottom").setPen("#d7d1c7")
+        self.plot_widget.getPlotItem().layout.setContentsMargins(12, 8, 12, 8)
         layout.addWidget(self.plot_widget)
 
         self._curves: Dict[str, pg.PlotCurveItem] = {}
@@ -33,7 +46,7 @@ class WaveformPlot(QWidget):
     def add_variable(self, name: str, color: str) -> None:
         if name in self._curves:
             return
-        curve = self.plot_widget.plot(name=name, pen=pg.mkPen(color=color, width=1.6))
+        curve = self.plot_widget.plot(name=name, pen=pg.mkPen(color=color, width=1.35))
         self._curves[name] = curve
         self._timestamps[name] = []
         self._values[name] = []
