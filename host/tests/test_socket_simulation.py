@@ -2,14 +2,18 @@ import socket
 import struct
 import threading
 import time
+from typing import List, Optional
 
-from sparam import Device, SocketConnection, Protocol, CommandType
+from sparam import CommandType, Device, Protocol, SocketConnection
+from sparam.device_manager import DeviceManager, SamplePoint
 from sparam.elf_parser import Variable
-from sparam.device_manager import DeviceManager
+from sparam.protocol import Frame
 
 
 class SimulatedDeviceServer:
-    def __init__(self, host: str = "127.0.0.1", port: int = 0, device_id: int = 1):
+    def __init__(
+        self, host: str = "127.0.0.1", port: int = 0, device_id: int = 1
+    ) -> None:
         self.host = host
         self.port = port
         self.device_id = device_id
@@ -22,16 +26,16 @@ class SimulatedDeviceServer:
         self.memory = {
             0x20000000: struct.pack("<I", 123456),
         }
-        self._stream_thread = None
+        self._stream_thread: Optional[threading.Thread] = None
         self._stream_stop = threading.Event()
-        self._stream_conn = None
+        self._stream_conn: Optional[socket.socket] = None
         self._stream_rate = 0
-        self._stream_addresses = []
+        self._stream_addresses: List[int] = []
 
-    def start(self):
+    def start(self) -> None:
         self._thread.start()
 
-    def stop(self):
+    def stop(self) -> None:
         self._stop.set()
         self._stream_stop.set()
         try:
@@ -44,7 +48,7 @@ class SimulatedDeviceServer:
             self._stream_thread.join(timeout=1.0)
         self._sock.close()
 
-    def _serve(self):
+    def _serve(self) -> None:
         while not self._stop.is_set():
             try:
                 conn, _ = self._sock.accept()
@@ -88,7 +92,9 @@ class SimulatedDeviceServer:
                         if response:
                             conn.sendall(response)
 
-    def _start_streaming(self, conn, command, addresses):
+    def _start_streaming(
+        self, conn: socket.socket, command: int, addresses: List[int]
+    ) -> None:
         self._stream_stop.set()
         if self._stream_thread:
             self._stream_thread.join(timeout=1.0)
@@ -98,7 +104,7 @@ class SimulatedDeviceServer:
         self._stream_rate = command - CommandType.READ_SINGLE
         self._stream_addresses = addresses
 
-        def stream():
+        def stream() -> None:
             tick = 0
             intervals = {
                 1: 0.001,
@@ -120,6 +126,8 @@ class SimulatedDeviceServer:
                     payload.extend(struct.pack("<I", address))
                     payload.extend(self.memory[address])
                 try:
+                    if self._stream_conn is None:
+                        break
                     self._stream_conn.sendall(
                         Protocol.encode(self.device_id, command, bytes(payload))
                     )
@@ -129,7 +137,7 @@ class SimulatedDeviceServer:
         self._stream_thread = threading.Thread(target=stream, daemon=True)
         self._stream_thread.start()
 
-    def _handle_frame(self, frame, conn):
+    def _handle_frame(self, frame: Frame, conn: socket.socket) -> bytes:
         if frame.command == CommandType.HEARTBEAT:
             return Protocol.encode(self.device_id, CommandType.ACK)
 
@@ -139,7 +147,9 @@ class SimulatedDeviceServer:
                 address = struct.unpack("<I", frame.data[i : i + 4])[0]
                 payload.extend(struct.pack("<I", address))
                 payload.extend(self.memory.get(address, b"\x00\x00\x00\x00"))
-            return Protocol.encode(self.device_id, CommandType.READ_SINGLE, bytes(payload))
+            return Protocol.encode(
+                self.device_id, CommandType.READ_SINGLE, bytes(payload)
+            )
 
         if frame.command in (CommandType.WRITE_SINGLE, CommandType.WRITE_BATCH):
             count = frame.data[0]
@@ -168,7 +178,7 @@ class SimulatedDeviceServer:
         return Protocol.encode(self.device_id, CommandType.NACK, b"\x02")
 
 
-def test_device_ping_read_write_over_socket():
+def test_device_ping_read_write_over_socket() -> None:
     server = SimulatedDeviceServer(device_id=1)
     server.start()
 
@@ -198,7 +208,7 @@ def test_device_ping_read_write_over_socket():
     server.stop()
 
 
-def test_device_manager_receives_periodic_stream_samples():
+def test_device_manager_receives_periodic_stream_samples() -> None:
     server = SimulatedDeviceServer(device_id=1)
     server.start()
 
@@ -212,7 +222,7 @@ def test_device_manager_receives_periodic_stream_samples():
         size=4,
         var_type="uint32_t",
     )
-    samples = []
+    samples: List[SamplePoint] = []
     manager = DeviceManager(device)
     manager.add_callback(samples.append)
 

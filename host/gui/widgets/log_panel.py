@@ -4,7 +4,7 @@ from PySide6.QtWidgets import QFrame, QTextEdit, QVBoxLayout
 
 
 class LogPanel(QFrame):
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.setObjectName("logPanel")
         layout = QVBoxLayout(self)
@@ -14,5 +14,5 @@ class LogPanel(QFrame):
         self.text_edit.setReadOnly(True)
         layout.addWidget(self.text_edit)
 
-    def append_line(self, message: str):
+    def append_line(self, message: str) -> None:
         self.text_edit.append(f"{strftime('%H:%M:%S')}  {message}")

@@ -1,13 +1,15 @@
-from PySide6.QtWidgets import QFrame, QLabel, QHBoxLayout, QVBoxLayout, QWidget
+from typing import Optional
+
+from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QVBoxLayout, QWidget
 
 from ..styles.catppuccin import ERROR, MUTED, SUCCESS
 
 
 class ValueCard(QFrame):
-    def __init__(self, name: str, color: str):
+    def __init__(self, name: str, color: str) -> None:
         super().__init__()
         self.setObjectName("valueCard")
-        self._last_value = None
+        self._last_value: Optional[float] = None
 
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -16,7 +18,9 @@ class ValueCard(QFrame):
         stripe = QWidget()
         stripe.setFixedWidth(2)
         stripe.setStyleSheet(
-            f"background: {color}; border-top-left-radius: 8px; border-bottom-left-radius: 8px;"
+            f"background: {color}; "
+            "border-top-left-radius: 8px; "
+            "border-bottom-left-radius: 8px;"
         )
 
         body = QWidget()
@@ -38,7 +42,7 @@ class ValueCard(QFrame):
         layout.addWidget(stripe)
         layout.addWidget(body)
 
-    def update_value(self, value: float):
+    def update_value(self, value: float) -> None:
         self.value_label.setText(f"{value:.3f}")
         if self._last_value is None:
             self.delta_label.setText("First sample")

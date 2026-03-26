@@ -6,7 +6,7 @@ from .main_window import MainWindow
 from .styles.catppuccin import build_stylesheet
 
 
-def run_gui():
+def run_gui() -> None:
     app = QApplication(sys.argv)
     app.setStyleSheet(build_stylesheet())
     window = MainWindow()

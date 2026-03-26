@@ -1,8 +1,9 @@
 import csv
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 from PySide6.QtCore import QObject, Qt, Signal
+from PySide6.QtGui import QCloseEvent
 from PySide6.QtWidgets import (
     QFileDialog,
     QFrame,
@@ -17,7 +18,14 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from sparam import DataType, Device, DeviceManager, ElfParser, MonitorStore, SerialConnection
+from sparam import (
+    Device,
+    DeviceManager,
+    ElfParser,
+    MonitorStore,
+    SamplePoint,
+    SerialConnection,
+)
 
 from .styles.catppuccin import SERIES_COLORS
 from .widgets.log_panel import LogPanel
@@ -30,7 +38,7 @@ from .widgets.waveform_plot import WaveformPlot
 class DeviceBridge(QObject):
     sample_received = Signal(str, float, float)
 
-    def emit_sample(self, sample):
+    def emit_sample(self, sample: SamplePoint) -> None:
         self.sample_received.emit(sample.name, sample.timestamp, sample.value)
 
 
@@ -52,7 +60,7 @@ class MainWindow(QMainWindow):
         "Infinite": None,
     }
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.setWindowTitle("sparam")
         self.resize(1360, 860)
@@ -74,7 +82,7 @@ class MainWindow(QMainWindow):
         self._build_ui()
         self._refresh_ports()
 
-    def _build_ui(self):
+    def _build_ui(self) -> None:
         root = QWidget(self)
         self.setCentralWidget(root)
         layout = QVBoxLayout(root)
@@ -159,7 +167,9 @@ class MainWindow(QMainWindow):
         layout.addWidget(splitter, 1)
         self._refresh_summary_cards()
 
-    def _create_summary_card(self, title: str, subtitle: str, field_names: List[str]):
+    def _create_summary_card(
+        self, title: str, subtitle: str, field_names: List[str]
+    ) -> Tuple[QFrame, Dict[str, QLabel]]:
         card = QFrame()
         card.setObjectName("summaryCard")
         layout = QVBoxLayout(card)
@@ -181,7 +191,9 @@ class MainWindow(QMainWindow):
             key = QLabel(name)
             key.setProperty("muted", True)
             value = QLabel("--")
-            value.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+            value.setAlignment(
+                Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
+            )
             row.addWidget(key)
             row.addWidget(value, 1)
             layout.addLayout(row)
@@ -190,17 +202,17 @@ class MainWindow(QMainWindow):
         layout.addStretch(1)
         return card, fields
 
-    def _log(self, message: str):
+    def _log(self, message: str) -> None:
         self.log_panel.append_line(message)
 
-    def _refresh_ports(self):
+    def _refresh_ports(self) -> None:
         ports = SerialConnection.list_ports()
         self.sidebar.set_ports(ports)
         if not ports:
             self._log("No serial ports found.")
         self._refresh_summary_cards()
 
-    def _browse_symbols(self):
+    def _browse_symbols(self) -> None:
         path, _ = QFileDialog.getOpenFileName(
             self,
             "Open ELF or MAP",
@@ -210,7 +222,7 @@ class MainWindow(QMainWindow):
         if path:
             self._load_symbols(path)
 
-    def _load_symbols(self, filepath: str):
+    def _load_symbols(self, filepath: str) -> None:
         try:
             variables = self.parser.parse(filepath)
         except Exception as exc:
@@ -222,7 +234,7 @@ class MainWindow(QMainWindow):
         self._log(f"Loaded {len(variables)} variables from {Path(filepath).name}.")
         self._refresh_summary_cards()
 
-    def _toggle_connection(self):
+    def _toggle_connection(self) -> None:
         if self.conn and self.conn.is_open():
             self._disconnect_device()
             return
@@ -248,7 +260,9 @@ class MainWindow(QMainWindow):
             conn.close()
             reason = device.last_error or "ping timeout"
             self._log(f"CONNECT FAIL: {reason}")
-            QMessageBox.warning(self, "Connection", "Ping failed. Check device id and cable.")
+            QMessageBox.warning(
+                self, "Connection", "Ping failed. Check device id and cable."
+            )
             return
 
         self.conn = conn
@@ -263,7 +277,7 @@ class MainWindow(QMainWindow):
         self._refresh_summary_cards()
         self._restart_monitoring_if_needed()
 
-    def _disconnect_device(self):
+    def _disconnect_device(self) -> None:
         if self.device_manager:
             self.device_manager.stop_monitor()
         if self.conn and self.conn.is_open():
@@ -278,7 +292,7 @@ class MainWindow(QMainWindow):
         self._log("Disconnected.")
         self._refresh_summary_cards()
 
-    def _preview_variable(self, name: str):
+    def _preview_variable(self, name: str) -> None:
         variable = self.parser.get_variable(name)
         if not variable:
             return
@@ -286,13 +300,15 @@ class MainWindow(QMainWindow):
             f"{variable.name}  0x{variable.address:08X}  {variable.var_type}"
         )
 
-    def _toggle_variable_monitor(self, name: str):
+    def _toggle_variable_monitor(self, name: str) -> None:
         variable = self.parser.get_variable(name)
         if not variable:
             return
 
         if name in self.monitored_names:
-            self.monitored_names = [item for item in self.monitored_names if item != name]
+            self.monitored_names = [
+                item for item in self.monitored_names if item != name
+            ]
             self.sidebar.set_monitored(name, False)
             self.waveform.remove_variable(name)
             self._remove_card(name)
@@ -315,21 +331,21 @@ class MainWindow(QMainWindow):
             index = len(self.monitored_names)
         return SERIES_COLORS[index % len(SERIES_COLORS)]
 
-    def _ensure_card(self, name: str, color: str):
+    def _ensure_card(self, name: str, color: str) -> None:
         if name in self.cards:
             return
         card = ValueCard(name, color)
         self.cards[name] = card
         self.cards_layout.insertWidget(max(0, self.cards_layout.count() - 1), card)
 
-    def _remove_card(self, name: str):
+    def _remove_card(self, name: str) -> None:
         card = self.cards.pop(name, None)
         if card is None:
             return
         card.setParent(None)
         card.deleteLater()
 
-    def _toggle_pause(self):
+    def _toggle_pause(self) -> None:
         self.monitor_paused = not self.monitor_paused
         self.waveform.set_paused(self.monitor_paused)
         self.toolbar.set_paused(self.monitor_paused)
@@ -337,15 +353,15 @@ class MainWindow(QMainWindow):
         self._log("Monitor paused." if self.monitor_paused else "Monitor resumed.")
         self._refresh_summary_cards()
 
-    def _set_time_window(self, label: str):
+    def _set_time_window(self, label: str) -> None:
         self.waveform.set_time_window(self.WINDOW_OPTIONS[label])
         self._refresh_summary_cards()
 
-    def _handle_rate_change(self, _label: str):
+    def _handle_rate_change(self, _label: str) -> None:
         self._refresh_summary_cards()
         self._restart_monitoring_if_needed()
 
-    def _restart_monitoring_if_needed(self):
+    def _restart_monitoring_if_needed(self) -> None:
         if not self.device_manager or not self.monitored_names:
             if self.device_manager:
                 self.device_manager.stop_monitor()
@@ -353,11 +369,11 @@ class MainWindow(QMainWindow):
             self._refresh_summary_cards()
             return
 
-        variables = [
-            self.parser.get_variable(name)
-            for name in self.monitored_names
-            if self.parser.get_variable(name)
-        ]
+        variables = []
+        for name in self.monitored_names:
+            variable = self.parser.get_variable(name)
+            if variable is not None:
+                variables.append(variable)
         if not variables:
             return
 
@@ -368,13 +384,15 @@ class MainWindow(QMainWindow):
         )
         if self.monitor_active:
             self._log(
-                f"Streaming {len(variables)} variable(s) at {self.sidebar.current_rate_label()}."
+                "Streaming "
+                f"{len(variables)} variable(s) at "
+                f"{self.sidebar.current_rate_label()}."
             )
         elif self.device:
             self._log(f"MONITOR FAIL: {self.device.last_error or 'unknown error'}")
         self._refresh_summary_cards()
 
-    def _on_sample_received(self, name: str, timestamp: float, value: float):
+    def _on_sample_received(self, name: str, timestamp: float, value: float) -> None:
         if self.monitor_paused:
             return
         self.store.append(name, timestamp, value)
@@ -384,7 +402,7 @@ class MainWindow(QMainWindow):
         self.waveform.update_data(name, timestamp, value)
         self._refresh_summary_cards()
 
-    def _export_png(self):
+    def _export_png(self) -> None:
         path, _ = QFileDialog.getSaveFileName(
             self,
             "Export Waveform PNG",
@@ -399,7 +417,7 @@ class MainWindow(QMainWindow):
         except Exception as exc:
             QMessageBox.warning(self, "Export PNG", f"Failed to export PNG: {exc}")
 
-    def _export_csv(self):
+    def _export_csv(self) -> None:
         path, _ = QFileDialog.getSaveFileName(
             self,
             "Export Waveform CSV",
@@ -417,14 +435,14 @@ class MainWindow(QMainWindow):
         except Exception as exc:
             QMessageBox.warning(self, "Export CSV", f"Failed to export CSV: {exc}")
 
-    def closeEvent(self, event):
+    def closeEvent(self, event: QCloseEvent) -> None:  # noqa: N802
         if self.device_manager:
             self.device_manager.stop_monitor()
         if self.conn and self.conn.is_open():
             self.conn.close()
         super().closeEvent(event)
 
-    def _refresh_summary_cards(self):
+    def _refresh_summary_cards(self) -> None:
         self.connection_fields["Port"].setText(
             self.sidebar.current_port() or "Not selected"
         )

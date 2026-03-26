@@ -1,30 +1,32 @@
-import click
+import csv
 import struct
 import sys
-from typing import Optional
+import time
+from typing import Optional, TextIO, Tuple
+
+import click
 
 from sparam import (
-    SerialConnection,
+    DataType,
     Device,
     ElfParser,
-    DataType,
     Protocol,
+    SerialConnection,
 )
 
 
 @click.group()
 @click.pass_context
-def main(ctx):
+def main(ctx: click.Context) -> None:
     ctx.ensure_object(dict)
 
 
-def launch_gui():
+def launch_gui() -> None:
     try:
         from gui import run_gui
     except ImportError as exc:
         click.echo(
-            "GUI dependencies are missing: "
-            f"{exc}. Install with `uv sync --extra gui`.",
+            f"GUI dependencies are missing: {exc}. Install with `uv sync --extra gui`.",
             err=True,
         )
         sys.exit(1)
@@ -33,7 +35,7 @@ def launch_gui():
 
 
 @main.command()
-def list_ports():
+def list_ports() -> None:
     ports = SerialConnection.list_ports()
     for port in ports:
         click.echo(port)
@@ -43,7 +45,7 @@ def list_ports():
 @click.argument("filepath", type=click.Path(exists=True))
 @click.option("--prefix", "-p", default=None, help="Filter variables by prefix")
 @click.option("--size", "-s", default=0, help="Filter by minimum size")
-def parse_elf(filepath: str, prefix: Optional[str], size: int):
+def parse_elf(filepath: str, prefix: Optional[str], size: int) -> None:
     parser = ElfParser()
     variables = parser.parse(filepath)
 
@@ -64,7 +66,7 @@ def parse_elf(filepath: str, prefix: Optional[str], size: int):
 @click.option("--baud", "-b", default=115200, help="Baud rate")
 @click.option("--device-id", "-d", default=1, help="Device ID")
 @click.option("--timeout", "-t", default=1.0, help="Timeout in seconds")
-def ping(port: str, baud: int, device_id: int, timeout: float):
+def ping(port: str, baud: int, device_id: int, timeout: float) -> None:
     conn = SerialConnection(port, baud, timeout)
     if not conn.open():
         click.echo("Failed to open port", err=True)
@@ -89,7 +91,14 @@ def ping(port: str, baud: int, device_id: int, timeout: float):
     "--var", "-v", multiple=True, required=True, help="Variable names to read"
 )
 @click.option("--timeout", "-t", default=1.0, help="Timeout in seconds")
-def read(port: str, baud: int, device_id: int, elf: str, var: tuple, timeout: float):
+def read(
+    port: str,
+    baud: int,
+    device_id: int,
+    elf: str,
+    var: Tuple[str, ...],
+    timeout: float,
+) -> None:
     conn = SerialConnection(port, baud, timeout)
     if not conn.open():
         click.echo("Failed to open port", err=True)
@@ -120,7 +129,7 @@ def read(port: str, baud: int, device_id: int, elf: str, var: tuple, timeout: fl
                 dtype = DataType(v.dtype_code)
                 val = struct.unpack(dtype.format_char, value)[0]
                 click.echo(f"{name} = {val}")
-            except:
+            except (struct.error, ValueError):
                 click.echo(f"{name} = {value.hex()}")
         else:
             click.echo(f"{name} = {value.hex()}")
@@ -153,7 +162,7 @@ def write(
     value: float,
     var_type: str,
     timeout: float,
-):
+) -> None:
     type_map = {
         "uint8": DataType.UINT8,
         "int8": DataType.INT8,
@@ -198,7 +207,7 @@ def write(
 @click.option("--baud", "-b", default=115200, help="Baud rate")
 @click.option("--device-id", "-d", default=1, help="Device ID")
 @click.option("--timeout", default=1.0, help="Timeout in seconds")
-def stop(port: str, baud: int, device_id: int, timeout: float):
+def stop(port: str, baud: int, device_id: int, timeout: float) -> None:
     conn = SerialConnection(port, baud, timeout)
     if not conn.open():
         click.echo("Failed to open port", err=True)
@@ -222,7 +231,9 @@ def stop(port: str, baud: int, device_id: int, timeout: float):
     "-r",
     default=3,
     type=click.IntRange(1, 8),
-    help="Sample rate (1=1ms, 2=5ms, 3=10ms, 4=20ms, 5=50ms, 6=100ms, 7=200ms, 8=500ms)",
+    help=(
+        "Sample rate (1=1ms, 2=5ms, 3=10ms, 4=20ms, 5=50ms, 6=100ms, 7=200ms, 8=500ms)"
+    ),
 )
 @click.option("--output", "-o", default=None, help="Output CSV file")
 @click.option("--count", "-c", default=0, help="Number of samples (0 for infinite)")
@@ -235,10 +246,7 @@ def monitor(
     rate: int,
     output: Optional[str],
     count: int,
-):
-    import time
-    import csv
-
+) -> None:
     conn = SerialConnection(port, baud, 1.0)
     if not conn.open():
         click.echo("Failed to open port", err=True)
@@ -260,8 +268,7 @@ def monitor(
         conn.close()
         sys.exit(1)
 
-    csv_file = None
-    csv_writer = None
+    csv_file: Optional[TextIO] = None
     if output:
         csv_file = open(output, "w", newline="")
         csv_writer = csv.writer(csv_file)
@@ -270,7 +277,7 @@ def monitor(
     sample_count = 0
     running = True
 
-    def on_data(name: str, value: bytes):
+    def on_data(name: str, value: bytes) -> None:
         nonlocal sample_count, running
         v = device.get_variable(name)
         if v and v.dtype_code:
@@ -278,7 +285,7 @@ def monitor(
                 dtype = DataType(v.dtype_code)
                 val = struct.unpack(dtype.format_char, value)[0]
                 click.echo(f"{name} = {val}")
-            except:
+            except (struct.error, ValueError):
                 click.echo(f"{name} = {value.hex()}")
         else:
             click.echo(f"{name} = {value.hex()}")
@@ -306,7 +313,7 @@ def monitor(
 
 
 @main.command()
-def gui():
+def gui() -> None:
     """Launch the desktop GUI."""
     launch_gui()
 

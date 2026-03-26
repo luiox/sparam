@@ -1,14 +1,14 @@
-from typing import Optional, Callable, List
-from threading import Thread, Event
 import time
+from threading import Event, Thread
+from typing import Callable, List, Literal, Optional
 
 try:
     import serial
     import serial.tools.list_ports
-except ImportError:
-    raise ImportError("pyserial is required: pip install pyserial")
+except ImportError as exc:
+    raise ImportError("pyserial is required: pip install pyserial") from exc
 
-from .protocol import Protocol, Frame
+from .protocol import Frame, Protocol
 
 
 class SerialConnection:
@@ -42,7 +42,7 @@ class SerialConnection:
             self.last_error = str(exc)
             return False
 
-    def close(self):
+    def close(self) -> None:
         self._stop_event.set()
         if self._rx_thread:
             self._rx_thread.join(timeout=1.0)
@@ -58,23 +58,29 @@ class SerialConnection:
     def send(self, data: bytes) -> bool:
         if not self.is_open():
             return False
+        serial_port = self._serial
+        if serial_port is None:
+            return False
         try:
-            self._serial.write(data)
+            serial_port.write(data)
             return True
         except serial.SerialException:
             return False
 
-    def _receive_loop(self):
+    def _receive_loop(self) -> None:
         while not self._stop_event.is_set() and self._serial:
             try:
-                data = self._serial.read(64)
+                serial_port = self._serial
+                if serial_port is None:
+                    break
+                data = serial_port.read(64)
                 if data:
                     self._rx_buffer.extend(data)
                     self._try_parse_frames()
             except serial.SerialException:
                 break
 
-    def _try_parse_frames(self):
+    def _try_parse_frames(self) -> None:
         while len(self._rx_buffer) >= 7:
             if self._rx_buffer[0] != 0xAA or self._rx_buffer[1] != 0x55:
                 self._rx_buffer.pop(0)
@@ -118,7 +124,7 @@ class SerialConnection:
 
         return None
 
-    def start_receive(self, on_frame: Callable[[Frame], None]):
+    def start_receive(self, on_frame: Callable[[Frame], None]) -> None:
         self._on_frame = on_frame
         self._stop_event.clear()
         self._rx_thread = Thread(target=self._receive_loop, daemon=True)
@@ -138,7 +144,7 @@ class SerialConnection:
             result: Optional[Frame] = None
             event = Event()
 
-            def on_response(frame: Frame):
+            def on_response(frame: Frame) -> None:
                 nonlocal result
                 if accept_frame and not accept_frame(frame):
                     return
@@ -158,8 +164,11 @@ class SerialConnection:
 
         # Sync request-response path for CLI/GUI commands that don't start RX thread.
         self._rx_buffer.clear()
+        serial_port = self._serial
+        if serial_port is None:
+            return None
         try:
-            self._serial.reset_input_buffer()
+            serial_port.reset_input_buffer()
         except serial.SerialException:
             return None
 
@@ -169,11 +178,11 @@ class SerialConnection:
         # Give UART/USB bridge a moment to push the full response into host buffer.
         time.sleep(0.02)
 
-        self._serial.timeout = timeout
+        serial_port.timeout = timeout
         buf = bytearray()
         for _ in range(3):
             try:
-                chunk = self._serial.read(64)
+                chunk = serial_port.read(64)
             except serial.SerialException:
                 return None
 
@@ -199,10 +208,12 @@ class SerialConnection:
 
         return None
 
-    def __enter__(self):
+    def __enter__(self) -> "SerialConnection":
         self.open()
         return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
+    def __exit__(
+        self, exc_type: object, exc_val: object, exc_tb: object
+    ) -> Literal[False]:
         self.close()
         return False

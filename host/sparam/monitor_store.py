@@ -1,6 +1,6 @@
 from collections import deque
 from dataclasses import dataclass
-from typing import Deque, Dict, List, Tuple
+from typing import Deque, Dict, List, Optional, Tuple
 
 
 @dataclass
@@ -29,7 +29,7 @@ class MonitorStore:
             values=list(self._values.get(name, [])),
         )
 
-    def latest_value(self, name: str):
+    def latest_value(self, name: str) -> Optional[float]:
         values = self._values.get(name)
         if not values:
             return None

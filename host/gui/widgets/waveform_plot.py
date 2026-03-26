@@ -1,4 +1,4 @@
-from typing import Dict, Optional
+from typing import Dict, List, Optional
 
 import pyqtgraph as pg
 from pyqtgraph.exporters import ImageExporter
@@ -6,7 +6,7 @@ from PySide6.QtWidgets import QVBoxLayout, QWidget
 
 
 class WaveformPlot(QWidget):
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.setObjectName("plotPanel")
         layout = QVBoxLayout(self)
@@ -25,12 +25,12 @@ class WaveformPlot(QWidget):
         layout.addWidget(self.plot_widget)
 
         self._curves: Dict[str, pg.PlotCurveItem] = {}
-        self._timestamps: Dict[str, list] = {}
-        self._values: Dict[str, list] = {}
+        self._timestamps: Dict[str, List[float]] = {}
+        self._values: Dict[str, List[float]] = {}
         self._time_window: Optional[float] = 10.0
         self._paused = False
 
-    def add_variable(self, name: str, color: str):
+    def add_variable(self, name: str, color: str) -> None:
         if name in self._curves:
             return
         curve = self.plot_widget.plot(name=name, pen=pg.mkPen(color=color, width=1.6))
@@ -38,14 +38,14 @@ class WaveformPlot(QWidget):
         self._timestamps[name] = []
         self._values[name] = []
 
-    def remove_variable(self, name: str):
+    def remove_variable(self, name: str) -> None:
         curve = self._curves.pop(name, None)
         if curve is not None:
             self.plot_widget.removeItem(curve)
         self._timestamps.pop(name, None)
         self._values.pop(name, None)
 
-    def update_data(self, name: str, timestamp: float, value: float):
+    def update_data(self, name: str, timestamp: float, value: float) -> None:
         if self._paused or name not in self._curves:
             return
 
@@ -69,12 +69,12 @@ class WaveformPlot(QWidget):
             values,
         )
 
-    def set_time_window(self, seconds: Optional[float]):
+    def set_time_window(self, seconds: Optional[float]) -> None:
         self._time_window = seconds
 
-    def set_paused(self, paused: bool):
+    def set_paused(self, paused: bool) -> None:
         self._paused = paused
 
-    def export_png(self, filepath: str):
+    def export_png(self, filepath: str) -> None:
         exporter = ImageExporter(self.plot_widget.plotItem)
         exporter.export(filepath)

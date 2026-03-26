@@ -12,7 +12,7 @@ from .styles.catppuccin import build_stylesheet
 
 
 class MockPreviewController:
-    def __init__(self, window: MainWindow):
+    def __init__(self, window: MainWindow) -> None:
         self.window = window
         self.start_time = time.time()
         self.tick = 0
@@ -25,20 +25,22 @@ class MockPreviewController:
         self.timer.timeout.connect(self.push_samples)
         self._setup_window()
 
-    def _setup_window(self):
+    def _setup_window(self) -> None:
         self.window.parser.variables = {item.name: item for item in self.variables}
         self.window.sidebar.set_variables(self.variables)
-        self.window.toolbar.set_status_text("Mock preview mode: synthetic waveform data")
+        self.window.toolbar.set_status_text(
+            "Mock preview mode: synthetic waveform data"
+        )
         self.window._log("Loaded mock variables for UI preview.")
         for variable in self.variables:
             self.window._toggle_variable_monitor(variable.name)
         self.window.monitor_active = True
         self.window._log("Mock preview stream started.")
 
-    def start(self):
+    def start(self) -> None:
         self.timer.start(50)
 
-    def push_samples(self):
+    def push_samples(self) -> None:
         elapsed = time.time() - self.start_time
         self.tick += 1
         speed = 1200 + 280 * math.sin(elapsed * 1.7) + (self.tick % 6) * 4
@@ -50,7 +52,7 @@ class MockPreviewController:
         self.window._on_sample_received("pid_kp", time.time(), float(kp))
 
 
-def run_mock_preview():
+def run_mock_preview() -> None:
     app = QApplication(sys.argv)
     app.setStyleSheet(build_stylesheet())
     window = MainWindow()

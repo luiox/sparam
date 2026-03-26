@@ -1,4 +1,4 @@
-from typing import Iterable
+from typing import Iterable, Optional, cast
 
 from PySide6.QtCore import Signal
 from PySide6.QtGui import QFont
@@ -16,6 +16,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from sparam.elf_parser import Variable
+
 
 class Sidebar(QFrame):
     refresh_requested = Signal()
@@ -29,7 +31,7 @@ class Sidebar(QFrame):
     variable_activated = Signal(str)
     selection_changed = Signal(str)
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.setObjectName("sidebar")
         self.setFixedWidth(258)
@@ -43,9 +45,9 @@ class Sidebar(QFrame):
         layout.addWidget(self._build_export_section())
         layout.addWidget(self._build_variable_section(), 1)
 
-    def _build_connection_section(self):
+    def _build_connection_section(self) -> QFrame:
         section = self._section_shell("Transport")
-        body = section.layout().itemAt(1).widget().layout()
+        body = self._section_body(section)
 
         self.port_combo = QComboBox()
         self.baud_spin = QSpinBox()
@@ -76,12 +78,14 @@ class Sidebar(QFrame):
         body.addWidget(self.load_symbols_btn)
         return section
 
-    def _build_monitor_section(self):
+    def _build_monitor_section(self) -> QFrame:
         section = self._section_shell("Monitor")
-        body = section.layout().itemAt(1).widget().layout()
+        body = self._section_body(section)
 
         self.rate_combo = QComboBox()
-        self.rate_combo.addItems(["10 ms", "20 ms", "50 ms", "100 ms", "200 ms", "500 ms"])
+        self.rate_combo.addItems(
+            ["10 ms", "20 ms", "50 ms", "100 ms", "200 ms", "500 ms"]
+        )
         self.rate_combo.setCurrentText("10 ms")
         self.rate_combo.currentTextChanged.connect(self.rate_changed.emit)
 
@@ -97,9 +101,9 @@ class Sidebar(QFrame):
         body.addWidget(self.pause_btn)
         return section
 
-    def _build_export_section(self):
+    def _build_export_section(self) -> QFrame:
         section = self._section_shell("Capture")
-        body = section.layout().itemAt(1).widget().layout()
+        body = self._section_body(section)
 
         self.export_png_btn = QPushButton("PNG Snapshot")
         self.export_csv_btn = QPushButton("CSV Export")
@@ -110,9 +114,9 @@ class Sidebar(QFrame):
         body.addWidget(self.export_csv_btn)
         return section
 
-    def _build_variable_section(self):
+    def _build_variable_section(self) -> QFrame:
         section = self._section_shell("Variables")
-        body = section.layout().itemAt(1).widget().layout()
+        body = self._section_body(section)
 
         helper = QLabel("Double-click to pin a symbol into the board.")
         helper.setProperty("muted", True)
@@ -131,7 +135,7 @@ class Sidebar(QFrame):
         body.addWidget(self.list_widget, 1)
         return section
 
-    def _section_shell(self, title: str):
+    def _section_shell(self, title: str) -> QFrame:
         shell = QFrame()
         shell.setObjectName("sectionCard")
         outer = QVBoxLayout(shell)
@@ -149,7 +153,17 @@ class Sidebar(QFrame):
         outer.addWidget(content)
         return shell
 
-    def _field(self, label: str, control):
+    def _section_body(self, section: QFrame) -> QVBoxLayout:
+        section_layout = cast(QVBoxLayout, section.layout())
+        item = section_layout.itemAt(1)
+        assert item is not None
+        body_widget = item.widget()
+        assert body_widget is not None
+        body_layout = body_widget.layout()
+        assert isinstance(body_layout, QVBoxLayout)
+        return body_layout
+
+    def _field(self, label: str, control: QWidget) -> QWidget:
         wrap = QWidget()
         layout = QVBoxLayout(wrap)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -160,14 +174,14 @@ class Sidebar(QFrame):
         layout.addWidget(control)
         return wrap
 
-    def set_variables(self, variables: Iterable):
+    def set_variables(self, variables: Iterable[Variable]) -> None:
         self.list_widget.clear()
         for variable in sorted(variables, key=lambda item: item.name):
             item = QListWidgetItem(variable.name)
             item.setData(1, variable.name)
             self.list_widget.addItem(item)
 
-    def set_monitored(self, name: str, monitored: bool):
+    def set_monitored(self, name: str, monitored: bool) -> None:
         for index in range(self.list_widget.count()):
             item = self.list_widget.item(index)
             if item.data(1) == name:
@@ -178,7 +192,7 @@ class Sidebar(QFrame):
                 item.setFont(font)
                 break
 
-    def set_ports(self, ports: Iterable[str]):
+    def set_ports(self, ports: Iterable[str]) -> None:
         current = self.port_combo.currentText()
         self.port_combo.clear()
         self.port_combo.addItems(list(ports))
@@ -199,19 +213,23 @@ class Sidebar(QFrame):
     def current_rate_label(self) -> str:
         return self.rate_combo.currentText()
 
-    def set_connected(self, connected: bool):
+    def set_connected(self, connected: bool) -> None:
         self.connect_btn.setText("Disconnect" if connected else "Connect")
 
-    def set_paused(self, paused: bool):
+    def set_paused(self, paused: bool) -> None:
         self.pause_btn.setText("Resume" if paused else "Pause")
 
-    def _apply_filter(self, text: str):
+    def _apply_filter(self, text: str) -> None:
         prefix = text.strip().lower()
         for index in range(self.list_widget.count()):
             item = self.list_widget.item(index)
             name = item.data(1) or item.text()
             item.setHidden(bool(prefix) and prefix not in name.lower())
 
-    def _on_current_changed(self, current: QListWidgetItem, _previous: QListWidgetItem):
+    def _on_current_changed(
+        self,
+        current: Optional[QListWidgetItem],
+        _previous: Optional[QListWidgetItem],
+    ) -> None:
         if current:
             self.selection_changed.emit(current.data(1) or current.text())

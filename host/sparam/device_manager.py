@@ -1,8 +1,9 @@
-from dataclasses import dataclass
 import time
-from typing import Callable, List, Optional
+from dataclasses import dataclass
+from typing import Callable, List
 
 from .device import Device
+from .elf_parser import Variable
 from .protocol import DataType
 
 
@@ -25,10 +26,9 @@ class DeviceManager:
     def remove_callback(self, callback: Callable[[SamplePoint], None]) -> None:
         self._callbacks = [item for item in self._callbacks if item != callback]
 
-    def start_monitor(self, variables, rate: int) -> bool:
-        if (
-            not self._receiving_started
-            and hasattr(self.device.connection, "start_receive")
+    def start_monitor(self, variables: List[Variable], rate: int) -> bool:
+        if not self._receiving_started and hasattr(
+            self.device.connection, "start_receive"
         ):
             self.device.connection.start_receive(self.device.on_frame_received)
             self._receiving_started = True

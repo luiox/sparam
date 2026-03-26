@@ -1,7 +1,7 @@
 from sparam.monitor_store import MonitorStore
 
 
-def test_monitor_store_keeps_latest_points_with_ring_buffer_limit():
+def test_monitor_store_keeps_latest_points_with_ring_buffer_limit() -> None:
     store = MonitorStore(max_points=3)
 
     store.append("motor_speed", 1.0, 10.0)
@@ -16,7 +16,7 @@ def test_monitor_store_keeps_latest_points_with_ring_buffer_limit():
     assert store.latest_value("motor_speed") == 40.0
 
 
-def test_monitor_store_exports_rows_in_timestamp_order():
+def test_monitor_store_exports_rows_in_timestamp_order() -> None:
     store = MonitorStore(max_points=5)
 
     store.append("speed", 1.0, 100.0)

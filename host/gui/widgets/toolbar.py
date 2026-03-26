@@ -2,7 +2,7 @@ from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QWidget
 
 
 class Toolbar(QFrame):
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.setObjectName("toolbar")
 
@@ -33,16 +33,16 @@ class Toolbar(QFrame):
         layout.addWidget(self.state_chip)
         layout.addWidget(self.status_label, 2)
 
-    def set_status_text(self, text: str):
+    def set_status_text(self, text: str) -> None:
         self.status_label.setText(text)
 
-    def set_connected(self, connected: bool):
+    def set_connected(self, connected: bool) -> None:
         self.state_chip.setText("Connected" if connected else "Offline")
         self.state_chip.setProperty("state", "connected" if connected else "idle")
         self.style().unpolish(self.state_chip)
         self.style().polish(self.state_chip)
 
-    def set_paused(self, paused: bool):
+    def set_paused(self, paused: bool) -> None:
         if paused:
             self.state_chip.setText("Paused")
             self.state_chip.setProperty("state", "warning")
