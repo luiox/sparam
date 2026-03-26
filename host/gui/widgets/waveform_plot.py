@@ -1,0 +1,80 @@
+from typing import Dict, Optional
+
+import pyqtgraph as pg
+from pyqtgraph.exporters import ImageExporter
+from PySide6.QtWidgets import QVBoxLayout, QWidget
+
+
+class WaveformPlot(QWidget):
+    def __init__(self):
+        super().__init__()
+        self.setObjectName("plotPanel")
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(12, 12, 12, 12)
+
+        self.plot_widget = pg.PlotWidget()
+        self.plot_widget.setBackground("#fcfcfd")
+        self.plot_widget.showGrid(x=True, y=True, alpha=0.05)
+        self.plot_widget.setLabel("left", "Value")
+        self.plot_widget.setLabel("bottom", "Time", units="s")
+        self.plot_widget.addLegend(offset=(8, 8))
+        self.plot_widget.getAxis("left").setTextPen("#6b7280")
+        self.plot_widget.getAxis("bottom").setTextPen("#6b7280")
+        self.plot_widget.getAxis("left").setPen("#d1d5db")
+        self.plot_widget.getAxis("bottom").setPen("#d1d5db")
+        layout.addWidget(self.plot_widget)
+
+        self._curves: Dict[str, pg.PlotCurveItem] = {}
+        self._timestamps: Dict[str, list] = {}
+        self._values: Dict[str, list] = {}
+        self._time_window: Optional[float] = 10.0
+        self._paused = False
+
+    def add_variable(self, name: str, color: str):
+        if name in self._curves:
+            return
+        curve = self.plot_widget.plot(name=name, pen=pg.mkPen(color=color, width=1.6))
+        self._curves[name] = curve
+        self._timestamps[name] = []
+        self._values[name] = []
+
+    def remove_variable(self, name: str):
+        curve = self._curves.pop(name, None)
+        if curve is not None:
+            self.plot_widget.removeItem(curve)
+        self._timestamps.pop(name, None)
+        self._values.pop(name, None)
+
+    def update_data(self, name: str, timestamp: float, value: float):
+        if self._paused or name not in self._curves:
+            return
+
+        timestamps = self._timestamps[name]
+        values = self._values[name]
+        timestamps.append(timestamp)
+        values.append(value)
+
+        if self._time_window is not None:
+            cutoff = timestamp - self._time_window
+            while timestamps and timestamps[0] < cutoff:
+                timestamps.pop(0)
+                values.pop(0)
+
+        if not timestamps:
+            return
+
+        origin = timestamps[0]
+        self._curves[name].setData(
+            [item - origin for item in timestamps],
+            values,
+        )
+
+    def set_time_window(self, seconds: Optional[float]):
+        self._time_window = seconds
+
+    def set_paused(self, paused: bool):
+        self._paused = paused
+
+    def export_png(self, filepath: str):
+        exporter = ImageExporter(self.plot_widget.plotItem)
+        exporter.export(filepath)
