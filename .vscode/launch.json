@@ -1,0 +1,27 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Launch sparam_demo (DAP)",
+            "cwd": "${workspaceRoot}",
+            "executable": "${workspaceRoot}\\demo\\build\\artifacts\\sparam_demo.elf",
+            "request": "launch",
+            "type": "cortex-debug",
+            "device": "STM32F103RC",
+            "interface": "swd",
+            "servertype": "openocd",
+            "configFiles": [
+                "interface/cmsis-dap.cfg",
+                "target/stm32f1x.cfg"
+            ],
+            "runToEntryPoint": "main",
+            "liveWatch": {
+                "enabled": true,
+                "samplesPerSecond": 4
+            }
+        }
+    ]
+}
