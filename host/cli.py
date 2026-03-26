@@ -18,6 +18,20 @@ def main(ctx):
     ctx.ensure_object(dict)
 
 
+def launch_gui():
+    try:
+        from gui import run_gui
+    except ImportError as exc:
+        click.echo(
+            "GUI dependencies are missing: "
+            f"{exc}. Install with `uv sync --extra gui`.",
+            err=True,
+        )
+        sys.exit(1)
+
+    run_gui()
+
+
 @main.command()
 def list_ports():
     ports = SerialConnection.list_ports()
@@ -287,6 +301,12 @@ def monitor(
     if csv_file:
         csv_file.close()
     conn.close()
+
+
+@main.command()
+def gui():
+    """Launch the desktop GUI."""
+    launch_gui()
 
 
 if __name__ == "__main__":

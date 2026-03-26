@@ -12,11 +12,12 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-gui = ["PyQt6>=6.4"]
+gui = ["PySide6>=6.6"]
 test = ["pytest>=8.0"]
 
 [project.scripts]
 sparam = "cli:main"
+sparam-gui = "cli:launch_gui"
 
 [build-system]
 requires = ["hatchling"]
