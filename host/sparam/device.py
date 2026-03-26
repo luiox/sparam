@@ -52,8 +52,12 @@ class Device:
 
     def ping(self, timeout: float = 1.0) -> bool:
         data = Protocol.encode_heartbeat(self.device_id)
-        response = self.connection.send_and_wait(data, timeout)
-        return response is not None and response.is_ack()
+        for _ in range(3):
+            response = self.connection.send_and_wait(data, timeout)
+            if response is not None and response.is_ack():
+                return True
+            time.sleep(0.05)
+        return False
 
     def query_info(self, timeout: float = 1.0) -> Optional[Dict]:
         data = Protocol.encode_query_info(self.device_id)

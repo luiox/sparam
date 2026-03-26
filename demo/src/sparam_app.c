@@ -14,6 +14,13 @@ static volatile uint8_t s_rx_buf_idx = 0;
 static uint8_t s_tx_dma_buf[SPARAM_TX_BUF_SIZE];
 static volatile uint8_t s_tx_busy = 0;
 
+static void sparam_start_rx_dma(uint8_t buf_idx)
+{
+    if (HAL_UARTEx_ReceiveToIdle_DMA(&huart1, s_rx_buf[buf_idx], SPARAM_RX_BUF_SIZE) != HAL_OK) {
+        Error_Handler();
+    }
+}
+
 void sparam_app_init(void)
 {
     memset(s_rx_buf, 0, sizeof(s_rx_buf));
@@ -21,9 +28,7 @@ void sparam_app_init(void)
 
     sparam_init(SPARAM_DEVICE_ID);
 
-    if (HAL_UART_Receive_DMA(&huart1, s_rx_buf[0], SPARAM_RX_BUF_SIZE) != HAL_OK) {
-        Error_Handler();
-    }
+    sparam_start_rx_dma(0);
 
     if (HAL_TIM_Base_Start_IT(&htim2) != HAL_OK) {
         Error_Handler();
@@ -72,8 +77,21 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
         uint8_t completed = s_rx_buf_idx;
         s_rx_buf_idx = (uint8_t)(1 - s_rx_buf_idx);
 
-        HAL_UART_Receive_DMA(&huart1, s_rx_buf[s_rx_buf_idx], SPARAM_RX_BUF_SIZE);
+        sparam_start_rx_dma(s_rx_buf_idx);
         sparam_on_rx_done(s_rx_buf[completed], SPARAM_RX_BUF_SIZE);
+    }
+}
+
+void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef *huart, uint16_t size)
+{
+    if (huart == &huart1) {
+        uint8_t completed = s_rx_buf_idx;
+        s_rx_buf_idx = (uint8_t)(1 - s_rx_buf_idx);
+
+        sparam_start_rx_dma(s_rx_buf_idx);
+        if (size > 0U && size <= SPARAM_RX_BUF_SIZE) {
+            sparam_on_rx_done(s_rx_buf[completed], size);
+        }
     }
 }
 

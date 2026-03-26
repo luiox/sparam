@@ -34,6 +34,15 @@ class SerialConnection:
                 baudrate=self.baudrate,
                 timeout=self.timeout,
             )
+            # Some USB-UART adapters toggle control lines on open and can reset target boards.
+            try:
+                self._serial.dtr = False
+                self._serial.rts = False
+            except Exception:
+                pass
+            time.sleep(0.2)
+            self._serial.reset_input_buffer()
+            self._serial.reset_output_buffer()
             return True
         except serial.SerialException:
             return False
@@ -92,6 +101,28 @@ class SerialConnection:
             if frame and self._on_frame:
                 self._on_frame(frame)
 
+    def _pop_next_frame(self) -> Optional[Frame]:
+        while len(self._rx_buffer) >= 7:
+            if self._rx_buffer[0] != 0xAA or self._rx_buffer[1] != 0x55:
+                self._rx_buffer.pop(0)
+                continue
+
+            if len(self._rx_buffer) < 4:
+                return None
+
+            length = self._rx_buffer[2]
+            total_len = 3 + length
+            if len(self._rx_buffer) < total_len:
+                return None
+
+            frame_data = bytes(self._rx_buffer[:total_len])
+            self._rx_buffer = self._rx_buffer[total_len:]
+            frame = Protocol.decode(frame_data)
+            if frame:
+                return frame
+
+        return None
+
     def start_receive(self, on_frame: Callable[[Frame], None]):
         self._on_frame = on_frame
         self._stop_event.clear()
@@ -99,24 +130,50 @@ class SerialConnection:
         self._rx_thread.start()
 
     def send_and_wait(self, data: bytes, timeout: float = 1.0) -> Optional[Frame]:
-        result: Optional[Frame] = None
-        event = Event()
-
-        def on_response(frame: Frame):
-            nonlocal result
-            result = frame
-            event.set()
-
-        old_callback = self._on_frame
-        self._on_frame = on_response
-
-        if not self.send(data):
-            self._on_frame = old_callback
+        if not self.is_open():
             return None
 
-        event.wait(timeout)
-        self._on_frame = old_callback
-        return result
+        # If an async RX loop is already running, wait through the callback path.
+        if self._rx_thread and self._rx_thread.is_alive():
+            result: Optional[Frame] = None
+            event = Event()
+
+            def on_response(frame: Frame):
+                nonlocal result
+                result = frame
+                event.set()
+
+            old_callback = self._on_frame
+            self._on_frame = on_response
+
+            if not self.send(data):
+                self._on_frame = old_callback
+                return None
+
+            event.wait(timeout)
+            self._on_frame = old_callback
+            return result
+
+        # Sync request-response path for CLI/GUI commands that don't start RX thread.
+        if not self.send(data):
+            return None
+
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            remaining = max(0.0, deadline - time.time())
+            self._serial.timeout = min(0.05, remaining)
+            try:
+                chunk = self._serial.read(64)
+            except serial.SerialException:
+                return None
+
+            if chunk:
+                self._rx_buffer.extend(chunk)
+                frame = self._pop_next_frame()
+                if frame:
+                    return frame
+
+        return None
 
     def __enter__(self):
         self.open()

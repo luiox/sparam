@@ -1,0 +1,106 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "sparam: demo build",
+      "type": "shell",
+      "command": "xmake build",
+      "options": {
+        "cwd": "${workspaceFolder}/demo"
+      },
+      "group": "build",
+      "problemMatcher": []
+    },
+    {
+      "label": "sparam: demo flash (openocd)",
+      "type": "shell",
+      "command": "${input:openocdBin}",
+      "args": [
+        "-f",
+        "interface/cmsis-dap.cfg",
+        "-f",
+        "target/stm32f1x.cfg",
+        "-c",
+        "program ${workspaceFolder}/demo/build/artifacts/sparam_demo.elf verify reset exit"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "dependsOn": [
+        "sparam: demo build"
+      ],
+      "dependsOrder": "sequence",
+      "problemMatcher": []
+    },
+    {
+      "label": "sparam: host ping",
+      "type": "shell",
+      "command": "uv",
+      "args": [
+        "run",
+        "sparam",
+        "ping",
+        "-p",
+        "${input:serialPort}",
+        "-b",
+        "${input:baudRate}",
+        "-d",
+        "${input:deviceId}",
+        "-t",
+        "1.0"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}/host"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "sparam: build + flash + ping",
+      "type": "shell",
+      "command": "echo Build/Flash/Ping done",
+      "dependsOn": [
+        "sparam: demo flash (openocd)",
+        "sparam: host ping"
+      ],
+      "dependsOrder": "sequence",
+      "problemMatcher": []
+    }
+  ],
+  "inputs": [
+    {
+      "id": "openocdBin",
+      "type": "promptString",
+      "description": "OpenOCD executable path (openocd or full path)",
+      "default": "D:/sdk/OpenOCD/bin/openocd.exe"
+    },
+    {
+      "id": "serialPort",
+      "type": "promptString",
+      "description": "Serial port for host ping",
+      "default": "COM13"
+    },
+    {
+      "id": "baudRate",
+      "type": "pickString",
+      "description": "UART baud rate",
+      "options": [
+        "115200",
+        "9600",
+        "57600"
+      ],
+      "default": "115200"
+    },
+    {
+      "id": "deviceId",
+      "type": "pickString",
+      "description": "sparam device id",
+      "options": [
+        "1",
+        "0",
+        "2",
+        "255"
+      ],
+      "default": "1"
+    }
+  ]
+}

@@ -110,7 +110,7 @@ static uint8_t get_type_size(uint8_t type)
 static void send_frame(uint8_t cmd, const uint8_t *data, uint16_t data_len)
 {
     uint16_t idx = 0;
-    uint16_t payload_len = 1 + data_len + 2;
+    uint16_t payload_len = 2 + data_len + 2;
     
     tx_buf[idx++] = FRAME_HEADER_H;
     tx_buf[idx++] = FRAME_HEADER_L;
