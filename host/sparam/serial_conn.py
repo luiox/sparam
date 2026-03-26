@@ -21,6 +21,7 @@ class SerialConnection:
         self._stop_event = Event()
         self._on_frame: Optional[Callable[[Frame], None]] = None
         self._rx_buffer = bytearray()
+        self.last_error = ""
 
     @staticmethod
     def list_ports() -> List[str]:
@@ -34,17 +35,11 @@ class SerialConnection:
                 baudrate=self.baudrate,
                 timeout=self.timeout,
             )
-            # Some USB-UART adapters toggle control lines on open and can reset target boards.
-            try:
-                self._serial.dtr = False
-                self._serial.rts = False
-            except Exception:
-                pass
-            time.sleep(0.2)
             self._serial.reset_input_buffer()
-            self._serial.reset_output_buffer()
+            self.last_error = ""
             return True
-        except serial.SerialException:
+        except serial.SerialException as exc:
+            self.last_error = str(exc)
             return False
 
     def close(self):
@@ -129,7 +124,12 @@ class SerialConnection:
         self._rx_thread = Thread(target=self._receive_loop, daemon=True)
         self._rx_thread.start()
 
-    def send_and_wait(self, data: bytes, timeout: float = 1.0) -> Optional[Frame]:
+    def send_and_wait(
+        self,
+        data: bytes,
+        timeout: float = 1.0,
+        accept_frame: Optional[Callable[[Frame], bool]] = None,
+    ) -> Optional[Frame]:
         if not self.is_open():
             return None
 
@@ -140,6 +140,8 @@ class SerialConnection:
 
             def on_response(frame: Frame):
                 nonlocal result
+                if accept_frame and not accept_frame(frame):
+                    return
                 result = frame
                 event.set()
 
@@ -155,23 +157,45 @@ class SerialConnection:
             return result
 
         # Sync request-response path for CLI/GUI commands that don't start RX thread.
+        self._rx_buffer.clear()
+        try:
+            self._serial.reset_input_buffer()
+        except serial.SerialException:
+            return None
+
         if not self.send(data):
             return None
 
-        deadline = time.time() + timeout
-        while time.time() < deadline:
-            remaining = max(0.0, deadline - time.time())
-            self._serial.timeout = min(0.05, remaining)
+        # Give UART/USB bridge a moment to push the full response into host buffer.
+        time.sleep(0.02)
+
+        self._serial.timeout = timeout
+        buf = bytearray()
+        for _ in range(3):
             try:
                 chunk = self._serial.read(64)
             except serial.SerialException:
                 return None
 
-            if chunk:
-                self._rx_buffer.extend(chunk)
-                frame = self._pop_next_frame()
-                if frame:
-                    return frame
+            if not chunk:
+                continue
+
+            buf.extend(chunk)
+            for i in range(max(0, len(buf) - 6)):
+                if buf[i] != 0xAA or buf[i + 1] != 0x55:
+                    continue
+
+                total_len = 3 + buf[i + 2]
+                end = i + total_len
+                if end > len(buf):
+                    continue
+
+                frame = Protocol.decode(bytes(buf[i:end]))
+                if frame is None:
+                    continue
+                if accept_frame and not accept_frame(frame):
+                    continue
+                return frame
 
         return None
 

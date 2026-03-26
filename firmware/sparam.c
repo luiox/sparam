@@ -44,6 +44,8 @@ static var_entry_t var_table[SPARAM_VARS_MAX_SIZE];
 static uint8_t var_count = 0;
 static uint8_t device_id = 0;
 static uint8_t tx_buf[SPARAM_TX_BUF_SIZE];
+static uint8_t rx_stream_buf[SPARAM_RX_BUF_SIZE * 2];
+static uint16_t rx_stream_len = 0;
 
 static const uint16_t crc16_table[256] = {
     0x0000, 0xC0C1, 0xC181, 0x0140, 0xC301, 0x03C0, 0x0280, 0xC241,
@@ -257,11 +259,21 @@ static void handle_write(const uint8_t *data, uint16_t len)
 
 static void process_frame(const uint8_t *data, uint16_t len)
 {
-    if (len < 5) {
+    if (len < 7) {
         return;
     }
     
     uint8_t rx_len = data[2];
+    if (rx_len < 4) {
+        return;
+    }
+
+    uint16_t frame_len = (uint16_t)(3 + rx_len);
+    if (len < frame_len) {
+        return;
+    }
+
+    uint16_t payload_bytes = (uint16_t)(rx_len - 2);
     uint8_t rx_dev_id = data[3];
     uint8_t cmd = data[4];
     
@@ -269,8 +281,9 @@ static void process_frame(const uint8_t *data, uint16_t len)
         return;
     }
     
-    uint16_t crc_calc = crc16_modbus(&data[3], rx_len);
-    uint16_t crc_recv = data[3 + rx_len] | (data[3 + rx_len + 1] << 8);
+    uint16_t crc_calc = crc16_modbus(&data[3], payload_bytes);
+    uint16_t crc_pos = (uint16_t)(3 + payload_bytes);
+    uint16_t crc_recv = data[crc_pos] | (data[crc_pos + 1] << 8);
     
     if (crc_calc != crc_recv) {
         send_nack(ERR_CRC);
@@ -278,7 +291,7 @@ static void process_frame(const uint8_t *data, uint16_t len)
     }
     
     const uint8_t *payload = &data[5];
-    uint16_t payload_len = rx_len - 3;
+    uint16_t payload_len = (uint16_t)(payload_bytes - 2);
     
     switch (cmd) {
         case CMD_HEARTBEAT:
@@ -316,21 +329,50 @@ void sparam_init(uint8_t dev_id)
 {
     device_id = dev_id;
     var_count = 0;
+    rx_stream_len = 0;
     memset(var_table, 0, sizeof(var_table));
     memset(tx_buf, 0, sizeof(tx_buf));
+    memset(rx_stream_buf, 0, sizeof(rx_stream_buf));
 }
 
 void sparam_on_rx_done(uint8_t *data, uint16_t len)
 {
-    if (data == NULL || len < 7) {
+    if (data == NULL || len == 0) {
         return;
     }
-    
-    if (data[0] != FRAME_HEADER_H || data[1] != FRAME_HEADER_L) {
-        return;
+
+    if ((uint32_t)rx_stream_len + (uint32_t)len > sizeof(rx_stream_buf)) {
+        rx_stream_len = 0;
     }
-    
-    process_frame(data, len);
+
+    memcpy(&rx_stream_buf[rx_stream_len], data, len);
+    rx_stream_len = (uint16_t)(rx_stream_len + len);
+
+    while (rx_stream_len >= 7) {
+        if (rx_stream_buf[0] != FRAME_HEADER_H || rx_stream_buf[1] != FRAME_HEADER_L) {
+            memmove(&rx_stream_buf[0], &rx_stream_buf[1], rx_stream_len - 1);
+            rx_stream_len--;
+            continue;
+        }
+
+        uint8_t frame_payload_plus_crc_len = rx_stream_buf[2];
+        if (frame_payload_plus_crc_len < 4) {
+            memmove(&rx_stream_buf[0], &rx_stream_buf[1], rx_stream_len - 1);
+            rx_stream_len--;
+            continue;
+        }
+
+        uint16_t frame_len = (uint16_t)(3 + frame_payload_plus_crc_len);
+        if (rx_stream_len < frame_len) {
+            break;
+        }
+
+        process_frame(rx_stream_buf, frame_len);
+        if (rx_stream_len > frame_len) {
+            memmove(&rx_stream_buf[0], &rx_stream_buf[frame_len], rx_stream_len - frame_len);
+        }
+        rx_stream_len = (uint16_t)(rx_stream_len - frame_len);
+    }
 }
 
 void sparam_on_timer_tick(void)

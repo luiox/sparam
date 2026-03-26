@@ -37,6 +37,71 @@ class Device:
         self._on_data: Optional[Callable[[str, bytes], None]] = None
         self._protocol_version: Optional[int] = None
         self._device_name: Optional[str] = None
+        self._last_error: str = ""
+
+    @property
+    def last_error(self) -> str:
+        return self._last_error
+
+    def _set_error_from_response(self, response: Optional[Frame], op: str):
+        if response is None:
+            self._last_error = f"{op}: timeout or no response"
+            return
+
+        if response.is_nack():
+            code = response.get_error_code()
+            if code is not None:
+                self._last_error = f"{op}: NACK {code.name} (0x{int(code):02X})"
+            else:
+                data_hex = response.data.hex() if response.data else ""
+                self._last_error = f"{op}: NACK (data={data_hex})"
+            return
+
+        self._last_error = f"{op}: unexpected command 0x{int(response.command):02X}"
+
+    def _send_and_wait_filtered(
+        self,
+        data: bytes,
+        timeout: float,
+        accept,
+    ) -> Optional[Frame]:
+        response = self.connection.send_and_wait(
+            data,
+            timeout,
+            accept_frame=accept,
+        )
+        if response is not None:
+            return response
+
+        # Fallback for flaky serial drivers: do one direct blocking exchange.
+        if isinstance(self.connection, SerialConnection) and self.connection.is_open():
+            try:
+                ser = self.connection._serial
+                ser.reset_input_buffer()
+                ser.write(data)
+                ser.timeout = timeout
+                chunk = ser.read(64)
+            except Exception:
+                return None
+
+            if not chunk:
+                return None
+
+            buf = bytearray(chunk)
+            for i in range(max(0, len(buf) - 6)):
+                if buf[i] != 0xAA or buf[i + 1] != 0x55:
+                    continue
+                end = i + 3 + buf[i + 2]
+                if end > len(buf):
+                    continue
+                frame = Protocol.decode(bytes(buf[i:end]))
+                if frame is None:
+                    continue
+                if accept and not accept(frame):
+                    continue
+                return frame
+
+        return None
 
     def load_elf(self, filepath: str) -> List[Variable]:
         return self.parser.parse(filepath)
@@ -53,15 +118,27 @@ class Device:
     def ping(self, timeout: float = 1.0) -> bool:
         data = Protocol.encode_heartbeat(self.device_id)
         for _ in range(3):
-            response = self.connection.send_and_wait(data, timeout)
+            response = self._send_and_wait_filtered(
+                data,
+                timeout,
+                accept=lambda f: f.is_ack() or f.is_nack(),
+            )
             if response is not None and response.is_ack():
+                # Clear stale periodic streaming state from previous host sessions.
+                self.stop_monitor()
+                self._last_error = ""
                 return True
             time.sleep(0.05)
+        self._set_error_from_response(response, "ping")
         return False
 
     def query_info(self, timeout: float = 1.0) -> Optional[Dict]:
         data = Protocol.encode_query_info(self.device_id)
-        response = self.connection.send_and_wait(data, timeout)
+        response = self._send_and_wait_filtered(
+            data,
+            timeout,
+            accept=lambda f: f.command == CommandType.QUERY_INFO or f.is_nack(),
+        )
 
         if response and len(response.data) >= 2:
             self._protocol_version = response.data[0]
@@ -75,6 +152,7 @@ class Device:
                 "protocol_version": self._protocol_version,
                 "device_name": self._device_name,
             }
+        self._set_error_from_response(response, "query_info")
         return None
 
     def read_single(
@@ -82,32 +160,68 @@ class Device:
     ) -> Dict[str, bytes]:
         addresses = [v.address for v in variables]
         data = Protocol.encode_read(self.device_id, addresses, rate=0)
-        response = self.connection.send_and_wait(data, timeout)
+        for _ in range(3):
+            response = self._send_and_wait_filtered(
+                data,
+                timeout,
+                accept=lambda f: (
+                    (f.command >= CommandType.READ_SINGLE and f.command <= CommandType.READ_500MS)
+                    or f.is_nack()
+                ),
+            )
 
-        results = {}
-        if response:
-            parsed = Protocol.decode_read_response(response)
-            addr_to_name = {v.address: v.name for v in variables}
-            for addr, value in parsed:
-                name = addr_to_name.get(addr)
-                if name:
-                    results[name] = value
+            results = {}
+            if response:
+                if response.is_nack():
+                    self._set_error_from_response(response, "read")
+                    return results
+                parsed = Protocol.decode_read_response(response)
+                addr_to_name = {v.address: v.name for v in variables}
+                for addr, value in parsed:
+                    name = addr_to_name.get(addr)
+                    if name:
+                        results[name] = value
 
-        return results
+                if parsed:
+                    self._last_error = ""
+                    return results
+
+                self._set_error_from_response(response, "read")
+            else:
+                self._set_error_from_response(response, "read")
+            time.sleep(0.03)
+
+        return {}
 
     def read_value(self, variable: Variable, timeout: float = 1.0) -> Optional[bytes]:
         results = self.read_single([variable], timeout)
         return results.get(variable.name)
 
     def write_single(
-        self, variable: Variable, value: bytes, timeout: float = 1.0
+        self,
+        variable: Variable,
+        value: bytes,
+        timeout: float = 1.0,
+        dtype_override: Optional[DataType] = None,
     ) -> bool:
-        dtype = (
+        dtype = dtype_override or (
             DataType(variable.dtype_code) if variable.dtype_code else DataType.UINT32
         )
         data = Protocol.encode_write(self.device_id, [(variable.address, dtype, value)])
-        response = self.connection.send_and_wait(data, timeout)
-        return response is not None and response.is_ack()
+        response: Optional[Frame] = None
+        for _ in range(3):
+            response = self._send_and_wait_filtered(
+                data,
+                timeout,
+                accept=lambda f: f.is_ack() or f.is_nack(),
+            )
+            if response is not None and response.is_ack():
+                self._last_error = ""
+                return True
+            self._set_error_from_response(response, "write")
+            time.sleep(0.03)
+
+        return False
 
     def write_batch(self, writes: List[tuple], timeout: float = 1.0) -> bool:
         encoded_writes = []
@@ -116,8 +230,17 @@ class Device:
             encoded_writes.append((var.address, dtype, value))
 
         data = Protocol.encode_write(self.device_id, encoded_writes)
-        response = self.connection.send_and_wait(data, timeout)
-        return response is not None and response.is_ack()
+        response = self._send_and_wait_filtered(
+            data,
+            timeout,
+            accept=lambda f: f.is_ack() or f.is_nack(),
+        )
+        if response is not None and response.is_ack():
+            self._last_error = ""
+            return True
+
+        self._set_error_from_response(response, "write_batch")
+        return False
 
     def start_monitor(
         self,
@@ -127,21 +250,36 @@ class Device:
     ) -> bool:
         addresses = [v.address for v in variables]
         data = Protocol.encode_read(self.device_id, addresses, rate=rate)
-        response = self.connection.send_and_wait(data)
+        response = self._send_and_wait_filtered(
+            data,
+            timeout=1.0,
+            accept=lambda f: f.is_ack() or f.is_nack(),
+        )
 
         if response and response.is_ack():
             for var in variables:
                 self._monitored[var.name] = MonitoredVar(variable=var, rate=rate)
             self._on_data = on_data
+            self._last_error = ""
             return True
 
+        self._set_error_from_response(response, "start_monitor")
         return False
 
     def stop_monitor(self) -> bool:
         data = Protocol.encode_stop(self.device_id)
-        response = self.connection.send_and_wait(data)
+        response = self._send_and_wait_filtered(
+            data,
+            timeout=1.0,
+            accept=lambda f: f.is_ack() or f.is_nack(),
+        )
         self._monitored.clear()
-        return response is not None and response.is_ack()
+        if response is not None and response.is_ack():
+            self._last_error = ""
+            return True
+
+        self._set_error_from_response(response, "stop_monitor")
+        return False
 
     def on_frame_received(self, frame: Frame):
         if (

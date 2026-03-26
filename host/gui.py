@@ -1,8 +1,10 @@
 import struct
 import sys
+import time
 from pathlib import Path
 from typing import Optional
 
+from PySide6.QtCore import QTimer
 from PySide6.QtWidgets import (
     QApplication,
     QFileDialog,
@@ -20,6 +22,8 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
     QComboBox,
+    QTableWidget,
+    QTableWidgetItem,
 )
 
 from sparam import DataType, Device, SerialConnection, ElfParser
@@ -35,6 +39,9 @@ class MainWindow(QMainWindow):
         self.device: Optional[Device] = None
         self.parser = ElfParser()
         self.current_elf_path: Optional[str] = None
+        self.monitor_var_name: Optional[str] = None
+        self.monitor_timer = QTimer(self)
+        self.monitor_timer.timeout.connect(self.poll_monitored_var)
 
         self._build_ui()
         self.refresh_ports()
@@ -124,10 +131,24 @@ class MainWindow(QMainWindow):
         action_layout = QHBoxLayout(action_row)
         self.read_btn = QPushButton("Read")
         self.write_btn = QPushButton("Write")
+        self.monitor_btn = QPushButton("Start Periodic")
+        self.stop_monitor_btn = QPushButton("Stop")
+        self.monitor_interval_ms = QSpinBox()
+        self.monitor_interval_ms.setRange(50, 5000)
+        self.monitor_interval_ms.setValue(200)
+        self.monitor_interval_ms.setSuffix(" ms")
         self.read_btn.clicked.connect(self.read_selected)
         self.write_btn.clicked.connect(self.write_selected)
+        self.monitor_btn.clicked.connect(self.start_periodic_read)
+        self.stop_monitor_btn.clicked.connect(self.stop_periodic_read)
         action_layout.addWidget(self.read_btn)
         action_layout.addWidget(self.write_btn)
+        action_layout.addWidget(self.monitor_interval_ms)
+        action_layout.addWidget(self.monitor_btn)
+        action_layout.addWidget(self.stop_monitor_btn)
+
+        self.monitor_table = QTableWidget(0, 3)
+        self.monitor_table.setHorizontalHeaderLabels(["Time", "Variable", "Value"])
 
         self.log_view = QTextEdit()
         self.log_view.setReadOnly(True)
@@ -135,6 +156,8 @@ class MainWindow(QMainWindow):
         right_layout.addWidget(QLabel("Selected Variable"))
         right_layout.addWidget(form_host)
         right_layout.addWidget(action_row)
+        right_layout.addWidget(QLabel("Periodic Read List"))
+        right_layout.addWidget(self.monitor_table, 1)
         right_layout.addWidget(QLabel("Log"))
         right_layout.addWidget(self.log_view, 1)
 
@@ -171,12 +194,16 @@ class MainWindow(QMainWindow):
 
         conn = SerialConnection(port, self.baud_spin.value(), timeout=1.0)
         if not conn.open():
+            reason = conn.last_error or "port busy or unavailable"
+            self._log(f"CONNECT FAIL: unable to open {port} ({reason})")
             QMessageBox.critical(self, "Connection", f"Failed to open {port}.")
             return
 
         device = Device(conn, self.device_id_spin.value(), elf_parser=self.parser)
         if not device.ping(timeout=1.0):
             conn.close()
+            reason = device.last_error or "ping timeout"
+            self._log(f"CONNECT FAIL: {reason}")
             QMessageBox.warning(self, "Connection", "Ping failed. Check device id and cable.")
             return
 
@@ -254,14 +281,19 @@ class MainWindow(QMainWindow):
     def read_selected(self):
         var = self._selected_variable()
         if not var:
+            self._log("READ FAIL: no variable selected")
             QMessageBox.warning(self, "Read", "Please select a variable first.")
             return
         if not self.device:
+            self._log("READ FAIL: no device connected")
             QMessageBox.warning(self, "Read", "No device connected. Load symbols works offline, Read needs a serial device.")
             return
 
+        self.device.stop_monitor()
+
         value = self.device.read_value(var, timeout=1.0)
         if value is None:
+            self._log(f"READ FAIL {var.name}: {self.device.last_error or 'unknown error'}")
             QMessageBox.warning(self, "Read", "Read failed.")
             return
 
@@ -278,14 +310,19 @@ class MainWindow(QMainWindow):
     def write_selected(self):
         var = self._selected_variable()
         if not var:
+            self._log("WRITE FAIL: no variable selected")
             QMessageBox.warning(self, "Write", "Please select a variable first.")
             return
         if not self.device:
+            self._log("WRITE FAIL: no device connected")
             QMessageBox.warning(self, "Write", "No device connected. Load symbols works offline, Write needs a serial device.")
             return
 
+        self.device.stop_monitor()
+
         raw_text = self.value_edit.text().strip()
         if not raw_text:
+            self._log("WRITE FAIL: empty value")
             QMessageBox.warning(self, "Write", "Please input a value.")
             return
 
@@ -298,15 +335,67 @@ class MainWindow(QMainWindow):
             else:
                 payload = struct.pack(dtype.format_char, int(raw_text, 0))
         except Exception as exc:
+            self._log(f"WRITE FAIL {var.name}: invalid value {raw_text} ({exc})")
             QMessageBox.warning(self, "Write", f"Invalid value: {exc}")
             return
 
-        if self.device.write_single(var, payload, timeout=1.0):
+        if self.device.write_single(var, payload, timeout=1.0, dtype_override=dtype):
             self._log(f"WRITE {var.name} <= {raw_text} ({dtype.name})")
         else:
+            self._log(f"WRITE FAIL {var.name}: {self.device.last_error or 'unknown error'}")
             QMessageBox.warning(self, "Write", "Write failed.")
 
+    def start_periodic_read(self):
+        var = self._selected_variable()
+        if not var:
+            self._log("MONITOR FAIL: no variable selected")
+            return
+        if not self.device:
+            self._log("MONITOR FAIL: no device connected")
+            return
+
+        self.monitor_var_name = var.name
+        self.monitor_timer.start(self.monitor_interval_ms.value())
+        self._log(
+            f"MONITOR START {var.name} every {self.monitor_interval_ms.value()} ms"
+        )
+
+    def stop_periodic_read(self):
+        if self.monitor_timer.isActive():
+            self.monitor_timer.stop()
+            self._log("MONITOR STOP")
+
+    def poll_monitored_var(self):
+        if not self.monitor_var_name or not self.device:
+            return
+
+        var = self.parser.get_variable(self.monitor_var_name)
+        if not var:
+            self._log("MONITOR FAIL: variable not found in parser")
+            self.stop_periodic_read()
+            return
+
+        value = self.device.read_value(var, timeout=0.5)
+        if value is None:
+            self._log(f"MONITOR FAIL {var.name}: {self.device.last_error or 'unknown error'}")
+            return
+
+        dtype = DataType(var.dtype_code) if var.dtype_code in [d.value for d in DataType] else DataType.UINT32
+        try:
+            decoded = struct.unpack(dtype.format_char, value[: dtype.size])[0]
+            shown = str(decoded)
+        except Exception:
+            shown = "0x" + value.hex()
+
+        row = self.monitor_table.rowCount()
+        self.monitor_table.insertRow(row)
+        self.monitor_table.setItem(row, 0, QTableWidgetItem(time.strftime("%H:%M:%S")))
+        self.monitor_table.setItem(row, 1, QTableWidgetItem(var.name))
+        self.monitor_table.setItem(row, 2, QTableWidgetItem(shown))
+        self.monitor_table.scrollToBottom()
+
     def closeEvent(self, event):
+        self.monitor_timer.stop()
         if self.conn and self.conn.is_open():
             self.conn.close()
         super().closeEvent(event)

@@ -91,12 +91,19 @@ class SocketConnection:
         self._rx_thread = Thread(target=self._receive_loop, daemon=True)
         self._rx_thread.start()
 
-    def send_and_wait(self, data: bytes, timeout: float = 1.0) -> Optional[Frame]:
+    def send_and_wait(
+        self,
+        data: bytes,
+        timeout: float = 1.0,
+        accept_frame: Optional[Callable[[Frame], bool]] = None,
+    ) -> Optional[Frame]:
         result: Optional[Frame] = None
         event = Event()
 
         def on_response(frame: Frame):
             nonlocal result
+            if accept_frame and not accept_frame(frame):
+                return
             result = frame
             event.set()
 

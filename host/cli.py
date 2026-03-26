@@ -97,6 +97,7 @@ def read(port: str, baud: int, device_id: int, elf: str, var: tuple, timeout: fl
 
     device = Device(conn, device_id)
     device.load_elf(elf)
+    device.stop_monitor()
 
     variables = []
     for name in var:
@@ -171,6 +172,7 @@ def write(
 
     device = Device(conn, device_id)
     device.load_elf(elf)
+    device.stop_monitor()
 
     variable = device.get_variable(var)
     if not variable:
