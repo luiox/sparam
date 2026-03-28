@@ -16,7 +16,7 @@ def test_main_window_exposes_signal_lab_layout() -> None:
         raise SkipTest("pyqtgraph is not installed")
 
     from PySide6.QtCore import QSettings, Qt
-    from PySide6.QtWidgets import QApplication, QDockWidget, QWidget
+    from PySide6.QtWidgets import QApplication, QDockWidget, QSizePolicy, QWidget
 
     from gui.main_window import MainWindow
 
@@ -35,6 +35,10 @@ def test_main_window_exposes_signal_lab_layout() -> None:
         assert hasattr(window.sidebar, "read_once_btn")
         assert hasattr(window.sidebar, "write_once_btn")
         assert hasattr(window.sidebar, "remove_var_btn")
+        assert (
+            window.toolbar.status_label.sizePolicy().horizontalPolicy()
+            == QSizePolicy.Policy.Ignored
+        )
 
         control_dock = window.findChild(QDockWidget, "sidebarControlDock")
         rw_dock = window.findChild(QDockWidget, "sidebarRwDock")

@@ -1,4 +1,4 @@
-from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QWidget
+from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QSizePolicy, QWidget
 
 
 class Toolbar(QFrame):
@@ -31,6 +31,11 @@ class Toolbar(QFrame):
             "Select symbols, arm a monitor stream, inspect response."
         )
         self.status_label.setProperty("muted", True)
+        self.status_label.setMinimumWidth(0)
+        self.status_label.setSizePolicy(
+            QSizePolicy.Policy.Ignored,
+            QSizePolicy.Policy.Preferred,
+        )
 
         layout.addWidget(brand_wrap, 1)
         layout.addWidget(self.state_chip)

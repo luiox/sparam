@@ -341,8 +341,10 @@ class MainWindow(QMainWindow):
             self.move(clamped_x, clamped_y)
 
     def _notify_runtime_warning(self, title: str, detail: str) -> None:
-        self.toolbar.set_status_text(f"{title}: {detail}")
-        self._log(f"{title}: {detail}")
+        full = f"{title}: {detail}"
+        brief = full if len(full) <= 110 else f"{full[:107]}..."
+        self.toolbar.set_status_text(brief)
+        self._log(full)
 
     def _save_window_layout(self) -> None:
         self.settings.setValue(self.SETTINGS_GEOMETRY_KEY, self.saveGeometry())
