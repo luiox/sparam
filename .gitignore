@@ -55,7 +55,12 @@ dkms.conf
 *.dwo
 /host/sparam/__pycache__
 /host/tests/__pycache__
+/host/gui/__pycache__
+/host/gui/styles/__pycache__
+/host/gui/widgets/__pycache__
 .vscode/c_cpp_properties.json
 .vscode/compile_commands.json
 /host/__pycache__
+/host/.pytest_cache/
+/host/.venv/
 /.xmake

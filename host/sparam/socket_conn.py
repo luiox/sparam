@@ -1,9 +1,9 @@
-from typing import Optional, Callable
-from threading import Thread, Event
 import socket
 import time
+from threading import Event, Thread
+from typing import Callable, Literal, Optional
 
-from .protocol import Protocol, Frame
+from .protocol import Frame, Protocol
 
 
 class SocketConnection:
@@ -19,14 +19,16 @@ class SocketConnection:
 
     def open(self) -> bool:
         try:
-            self._sock = socket.create_connection((self.host, self.port), timeout=self.timeout)
+            self._sock = socket.create_connection(
+                (self.host, self.port), timeout=self.timeout
+            )
             self._sock.settimeout(0.2)
             return True
         except OSError:
             self._sock = None
             return False
 
-    def close(self):
+    def close(self) -> None:
         self._stop_event.set()
         if self._rx_thread:
             self._rx_thread.join(timeout=1.0)
@@ -51,7 +53,7 @@ class SocketConnection:
         except OSError:
             return False
 
-    def _receive_loop(self):
+    def _receive_loop(self) -> None:
         while not self._stop_event.is_set() and self._sock:
             try:
                 data = self._sock.recv(256)
@@ -64,7 +66,7 @@ class SocketConnection:
             except OSError:
                 break
 
-    def _try_parse_frames(self):
+    def _try_parse_frames(self) -> None:
         while len(self._rx_buffer) >= 7:
             if self._rx_buffer[0] != 0xAA or self._rx_buffer[1] != 0x55:
                 self._rx_buffer.pop(0)
@@ -85,7 +87,7 @@ class SocketConnection:
             if frame and self._on_frame:
                 self._on_frame(frame)
 
-    def start_receive(self, on_frame: Callable[[Frame], None]):
+    def start_receive(self, on_frame: Callable[[Frame], None]) -> None:
         self._on_frame = on_frame
         self._stop_event.clear()
         self._rx_thread = Thread(target=self._receive_loop, daemon=True)
@@ -100,7 +102,7 @@ class SocketConnection:
         result: Optional[Frame] = None
         event = Event()
 
-        def on_response(frame: Frame):
+        def on_response(frame: Frame) -> None:
             nonlocal result
             if accept_frame and not accept_frame(frame):
                 return
@@ -135,10 +137,12 @@ class SocketConnection:
         self._on_frame = old_callback
         return result
 
-    def __enter__(self):
+    def __enter__(self) -> "SocketConnection":
         self.open()
         return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
+    def __exit__(
+        self, exc_type: object, exc_val: object, exc_tb: object
+    ) -> Literal[False]:
         self.close()
         return False

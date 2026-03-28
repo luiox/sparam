@@ -2,6 +2,88 @@
   "version": "2.0.0",
   "tasks": [
     {
+      "label": "sparam: host format",
+      "type": "shell",
+      "command": "uv",
+      "args": [
+        "run",
+        "--extra",
+        "dev",
+        "ruff",
+        "format",
+        "."
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}/host"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "sparam: host lint",
+      "type": "shell",
+      "command": "uv",
+      "args": [
+        "run",
+        "--extra",
+        "dev",
+        "ruff",
+        "check",
+        "."
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}/host"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "sparam: host type-check",
+      "type": "shell",
+      "command": "uv",
+      "args": [
+        "run",
+        "--extra",
+        "dev",
+        "mypy",
+        "cli.py",
+        "gui",
+        "sparam",
+        "tests"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}/host"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "sparam: host quality",
+      "type": "shell",
+      "command": "echo Host quality checks done",
+      "dependsOn": [
+        "sparam: host format",
+        "sparam: host lint",
+        "sparam: host type-check",
+        "sparam: host test"
+      ],
+      "dependsOrder": "sequence",
+      "problemMatcher": []
+    },
+    {
+      "label": "sparam: host test",
+      "type": "shell",
+      "command": "uv",
+      "args": [
+        "run",
+        "--extra",
+        "test",
+        "pytest",
+        "-q"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}/host"
+      },
+      "problemMatcher": []
+    },
+    {
       "label": "sparam: demo build",
       "type": "shell",
       "command": "xmake build",

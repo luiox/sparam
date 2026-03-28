@@ -1,7 +1,8 @@
-from enum import IntEnum
-from dataclasses import dataclass
-from typing import List, Optional, Tuple
 import struct
+from dataclasses import dataclass
+from enum import IntEnum
+from typing import List, Optional, Tuple
+
 import crcmod.predefined
 
 
@@ -104,7 +105,7 @@ class Protocol:
 
     @classmethod
     def crc16(cls, data: bytes) -> int:
-        return cls._CRC16_MODBUS(data)
+        return int(cls._CRC16_MODBUS(data))
 
     @classmethod
     def encode(cls, device_id: int, command: int, data: bytes = b"") -> bytes:
@@ -143,10 +144,11 @@ class Protocol:
 
     @classmethod
     def encode_read(cls, device_id: int, addresses: List[int], rate: int = 0) -> bytes:
+        command: int
         if rate == 0:
             command = CommandType.READ_SINGLE
         else:
-            command = CommandType.READ_SINGLE + rate
+            command = int(CommandType.READ_SINGLE) + rate
 
         data = b"".join(struct.pack("<I", addr) for addr in addresses)
         return cls.encode(device_id, command, data)

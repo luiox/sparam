@@ -1,7 +1,6 @@
-from dataclasses import dataclass
-from typing import Dict, List, Optional
-import struct
 import re
+from dataclasses import dataclass
+from typing import Any, Dict, List, Optional
 
 
 @dataclass
@@ -32,14 +31,14 @@ class Variable:
 
 
 class ElfParser:
-    def __init__(self):
+    def __init__(self) -> None:
         self.variables: Dict[str, Variable] = {}
 
     def parse_elf(self, filepath: str) -> List[Variable]:
         try:
             from elftools.elf.elffile import ELFFile
-        except ImportError:
-            raise ImportError("pyelftools is required: pip install pyelftools")
+        except ImportError as exc:
+            raise ImportError("pyelftools is required: pip install pyelftools") from exc
 
         self.variables.clear()
 
@@ -52,7 +51,7 @@ class ElfParser:
 
         return list(self.variables.values())
 
-    def _parse_section_symbols(self, elf, section):
+    def _parse_section_symbols(self, elf: Any, section: Any) -> None:
         from elftools.elf.sections import SymbolTableSection
 
         for s in elf.iter_sections():
@@ -67,7 +66,7 @@ class ElfParser:
                         sym_section = elf.get_section(sym["st_shndx"])
                         if sym_section.name not in [".data", ".bss", ".noinit"]:
                             continue
-                    except:
+                    except Exception:
                         continue
 
                     name = sym.name
@@ -95,7 +94,7 @@ class ElfParser:
     def parse_map(self, filepath: str) -> List[Variable]:
         self.variables.clear()
 
-        with open(filepath, "r", encoding="utf-8", errors="ignore") as f:
+        with open(filepath, encoding="utf-8", errors="ignore") as f:
             content = f.read()
 
         patterns = [

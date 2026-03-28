@@ -12,13 +12,63 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-gui = ["PySide6>=6.6"]
+dev = [
+    "mypy>=1.11",
+    "ruff>=0.11",
+]
+gui = ["PySide6>=6.6", "pyqtgraph>=0.13"]
 test = ["pytest>=8.0"]
 
 [project.scripts]
 sparam = "cli:main"
 sparam-gui = "cli:launch_gui"
+sparam-gui-mock = "gui.mock_preview:run_mock_preview"
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[tool.ruff]
+line-length = 88
+target-version = "py38"
+
+[tool.ruff.lint]
+select = [
+    "E",
+    "F",
+    "I",
+    "B",
+    "UP",
+    "N",
+]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "lf"
+
+[tool.mypy]
+python_version = "3.9"
+pretty = true
+show_error_codes = true
+warn_unused_configs = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+warn_return_any = true
+check_untyped_defs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+no_implicit_optional = true
+strict_equality = true
+
+[[tool.mypy.overrides]]
+module = [
+    "crcmod",
+    "crcmod.*",
+    "serial",
+    "serial.*",
+    "pyqtgraph",
+    "pyqtgraph.*",
+]
+ignore_missing_imports = true
