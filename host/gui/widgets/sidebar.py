@@ -1,4 +1,4 @@
-from typing import Iterable, Optional, cast
+from typing import Dict, Iterable, List, Optional, cast
 
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
@@ -37,6 +37,10 @@ class Sidebar(QFrame):
         super().__init__()
         self.setObjectName("sidebar")
 
+        self._sections: List[QFrame] = []
+        self._section_content_widgets: Dict[QFrame, QWidget] = {}
+        self._section_toggle_buttons: Dict[QFrame, QPushButton] = {}
+
         self._connection_section = self._build_connection_section()
         self._monitor_section = self._build_monitor_section()
         self._export_section = self._build_export_section()
@@ -45,6 +49,10 @@ class Sidebar(QFrame):
 
         self._control_panel = self._build_dock_panel()
         control_layout = cast(QVBoxLayout, self._control_panel.layout())
+        self.toggle_all_btn = QPushButton("Collapse All")
+        self.toggle_all_btn.setProperty("micro", True)
+        self.toggle_all_btn.clicked.connect(self.toggle_all_sections)
+        control_layout.addWidget(self.toggle_all_btn)
         control_layout.addWidget(self._connection_section)
         control_layout.addWidget(self._monitor_section)
         control_layout.addWidget(self._export_section)
@@ -59,6 +67,8 @@ class Sidebar(QFrame):
         variable_layout = cast(QVBoxLayout, self._variable_panel.layout())
         variable_layout.addWidget(self._variable_section, 1)
 
+        self._sync_toggle_all_button_text()
+
     def control_panel_widget(self) -> QFrame:
         return self._control_panel
 
@@ -67,6 +77,15 @@ class Sidebar(QFrame):
 
     def variable_panel_widget(self) -> QFrame:
         return self._variable_panel
+
+    def toggle_all_sections(self) -> None:
+        target_expanded = not self.all_sections_expanded()
+        for section in self._sections:
+            self._set_section_expanded(section, target_expanded)
+        self._sync_toggle_all_button_text()
+
+    def all_sections_expanded(self) -> bool:
+        return all(self._is_section_expanded(section) for section in self._sections)
 
     def _build_dock_panel(self) -> QFrame:
         panel = QFrame()
@@ -204,16 +223,52 @@ class Sidebar(QFrame):
         outer.setContentsMargins(8, 8, 8, 8)
         outer.setSpacing(6)
 
+        header_row = QHBoxLayout()
+        header_row.setContentsMargins(0, 0, 0, 0)
+        header_row.setSpacing(6)
+
         header = QLabel(title)
         header.setProperty("sectionTitle", True)
+        toggle_btn = QPushButton("-")
+        toggle_btn.setProperty("micro", True)
+
         content = QWidget()
         content_layout = QVBoxLayout(content)
         content_layout.setContentsMargins(0, 0, 0, 0)
         content_layout.setSpacing(5)
 
-        outer.addWidget(header)
+        header_row.addWidget(header)
+        header_row.addStretch(1)
+        header_row.addWidget(toggle_btn)
+        outer.addLayout(header_row)
         outer.addWidget(content)
+
+        self._sections.append(shell)
+        self._section_content_widgets[shell] = content
+        self._section_toggle_buttons[shell] = toggle_btn
+        toggle_btn.clicked.connect(
+            lambda _checked=False, section=shell: self._toggle_section(section)
+        )
         return shell
+
+    def _is_section_expanded(self, section: QFrame) -> bool:
+        content = self._section_content_widgets[section]
+        return not content.isHidden()
+
+    def _set_section_expanded(self, section: QFrame, expanded: bool) -> None:
+        content = self._section_content_widgets[section]
+        content.setVisible(expanded)
+        button = self._section_toggle_buttons[section]
+        button.setText("-" if expanded else "+")
+
+    def _toggle_section(self, section: QFrame) -> None:
+        self._set_section_expanded(section, not self._is_section_expanded(section))
+        self._sync_toggle_all_button_text()
+
+    def _sync_toggle_all_button_text(self) -> None:
+        self.toggle_all_btn.setText(
+            "Collapse All" if self.all_sections_expanded() else "Expand All"
+        )
 
     def _section_body(self, section: QFrame) -> QVBoxLayout:
         section_layout = cast(QVBoxLayout, section.layout())

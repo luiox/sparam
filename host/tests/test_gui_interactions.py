@@ -110,3 +110,28 @@ def test_write_once_uses_integer_parsing_for_uint32() -> None:
 
         window.close()
     app.quit()
+
+
+def test_sidebar_toggle_all_sections_round_trip() -> None:
+    _require_gui_stack()
+
+    from PySide6.QtWidgets import QApplication
+
+    from gui.widgets.sidebar import Sidebar
+
+    app = QApplication.instance() or QApplication([])
+
+    sidebar = Sidebar()
+    assert sidebar.all_sections_expanded()
+    assert sidebar.toggle_all_btn.text() == "Collapse All"
+
+    sidebar.toggle_all_sections()
+    assert not sidebar.all_sections_expanded()
+    assert sidebar.toggle_all_btn.text() == "Expand All"
+
+    sidebar.toggle_all_sections()
+    assert sidebar.all_sections_expanded()
+    assert sidebar.toggle_all_btn.text() == "Collapse All"
+
+    sidebar.deleteLater()
+    app.quit()

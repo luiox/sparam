@@ -98,6 +98,12 @@ def build_stylesheet() -> str:
     QPushButton {{
         font-weight: 600;
     }}
+    QPushButton[micro="true"] {{
+        padding: 2px 6px;
+        min-height: 0px;
+        font-size: 10px;
+        font-weight: 700;
+    }}
     QPushButton:hover {{
         background: {CARD_BG};
         border-color: {BORDER_STRONG};
