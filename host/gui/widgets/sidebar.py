@@ -36,17 +36,46 @@ class Sidebar(QFrame):
     def __init__(self) -> None:
         super().__init__()
         self.setObjectName("sidebar")
-        self.setMinimumWidth(220)
 
-        layout = QVBoxLayout(self)
+        self._connection_section = self._build_connection_section()
+        self._monitor_section = self._build_monitor_section()
+        self._export_section = self._build_export_section()
+        self._io_section = self._build_io_section()
+        self._variable_section = self._build_variable_section()
+
+        self._control_panel = self._build_dock_panel()
+        control_layout = cast(QVBoxLayout, self._control_panel.layout())
+        control_layout.addWidget(self._connection_section)
+        control_layout.addWidget(self._monitor_section)
+        control_layout.addWidget(self._export_section)
+        control_layout.addStretch(1)
+
+        self._io_panel = self._build_dock_panel()
+        io_layout = cast(QVBoxLayout, self._io_panel.layout())
+        io_layout.addWidget(self._io_section)
+        io_layout.addStretch(1)
+
+        self._variable_panel = self._build_dock_panel()
+        variable_layout = cast(QVBoxLayout, self._variable_panel.layout())
+        variable_layout.addWidget(self._variable_section, 1)
+
+    def control_panel_widget(self) -> QFrame:
+        return self._control_panel
+
+    def io_panel_widget(self) -> QFrame:
+        return self._io_panel
+
+    def variable_panel_widget(self) -> QFrame:
+        return self._variable_panel
+
+    def _build_dock_panel(self) -> QFrame:
+        panel = QFrame()
+        panel.setObjectName("sidebar")
+        panel.setMinimumWidth(220)
+        layout = QVBoxLayout(panel)
         layout.setContentsMargins(12, 12, 12, 12)
         layout.setSpacing(10)
-
-        layout.addWidget(self._build_connection_section())
-        layout.addWidget(self._build_monitor_section())
-        layout.addWidget(self._build_io_section())
-        layout.addWidget(self._build_export_section())
-        layout.addWidget(self._build_variable_section(), 1)
+        return panel
 
     def _build_connection_section(self) -> QFrame:
         section = self._section_shell("Transport")

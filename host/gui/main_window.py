@@ -74,7 +74,7 @@ class MainWindow(QMainWindow):
     SETTINGS_APP = "sparam-gui"
     SETTINGS_GEOMETRY_KEY = "window/geometry"
     SETTINGS_STATE_KEY = "window/state"
-    SETTINGS_STATE_VERSION = 1
+    SETTINGS_STATE_VERSION = 2
 
     def __init__(self, settings: Optional[QSettings] = None) -> None:
         super().__init__()
@@ -173,15 +173,29 @@ class MainWindow(QMainWindow):
     def _setup_docks(self) -> None:
         self.setDockNestingEnabled(True)
 
-        self.sidebar_dock = QDockWidget("Sidebar", self)
-        self.sidebar_dock.setObjectName("sidebarDock")
-        self.sidebar_dock.setFeatures(
+        self.sidebar_control_dock = QDockWidget("Transport & Monitor", self)
+        self.sidebar_control_dock.setObjectName("sidebarControlDock")
+        self.sidebar_control_dock.setFeatures(
             QDockWidget.DockWidgetFeature.DockWidgetMovable
             | QDockWidget.DockWidgetFeature.DockWidgetFloatable
         )
-        self.sidebar_dock.setWidget(self.sidebar)
-        self.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, self.sidebar_dock)
-        self.sidebar_dock.resize(260, 700)
+        self.sidebar_control_dock.setWidget(self.sidebar.control_panel_widget())
+
+        self.sidebar_rw_dock = QDockWidget("Single Read/Write", self)
+        self.sidebar_rw_dock.setObjectName("sidebarRwDock")
+        self.sidebar_rw_dock.setFeatures(
+            QDockWidget.DockWidgetFeature.DockWidgetMovable
+            | QDockWidget.DockWidgetFeature.DockWidgetFloatable
+        )
+        self.sidebar_rw_dock.setWidget(self.sidebar.io_panel_widget())
+
+        self.sidebar_variables_dock = QDockWidget("Variables", self)
+        self.sidebar_variables_dock.setObjectName("sidebarVariablesDock")
+        self.sidebar_variables_dock.setFeatures(
+            QDockWidget.DockWidgetFeature.DockWidgetMovable
+            | QDockWidget.DockWidgetFeature.DockWidgetFloatable
+        )
+        self.sidebar_variables_dock.setWidget(self.sidebar.variable_panel_widget())
 
         self.inspector = self._build_inspector_panel()
         self.inspector_dock = QDockWidget("Inspector", self)
@@ -191,8 +205,53 @@ class MainWindow(QMainWindow):
             | QDockWidget.DockWidgetFeature.DockWidgetFloatable
         )
         self.inspector_dock.setWidget(self.inspector)
+
+        # Keep this alias for compatibility with existing callers/tests.
+        self.sidebar_dock = self.sidebar_control_dock
+
+        self._apply_default_dock_layout()
+
+    def _apply_default_dock_layout(self) -> None:
+        self.addDockWidget(
+            Qt.DockWidgetArea.LeftDockWidgetArea,
+            self.sidebar_control_dock,
+        )
+        self.addDockWidget(
+            Qt.DockWidgetArea.LeftDockWidgetArea,
+            self.sidebar_rw_dock,
+        )
+        self.splitDockWidget(
+            self.sidebar_control_dock,
+            self.sidebar_rw_dock,
+            Qt.Orientation.Vertical,
+        )
+        self.addDockWidget(
+            Qt.DockWidgetArea.LeftDockWidgetArea,
+            self.sidebar_variables_dock,
+        )
+        self.splitDockWidget(
+            self.sidebar_rw_dock,
+            self.sidebar_variables_dock,
+            Qt.Orientation.Vertical,
+        )
+
         self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self.inspector_dock)
-        self.inspector_dock.resize(340, 700)
+
+        # Default split: compact 260px left rail and flexible center/right area.
+        self.resizeDocks(
+            [self.sidebar_control_dock, self.inspector_dock],
+            [260, 340],
+            Qt.Orientation.Horizontal,
+        )
+        self.resizeDocks(
+            [
+                self.sidebar_control_dock,
+                self.sidebar_rw_dock,
+                self.sidebar_variables_dock,
+            ],
+            [220, 170, 360],
+            Qt.Orientation.Vertical,
+        )
 
     def _build_inspector_panel(self) -> QFrame:
         inspector = QFrame()
@@ -222,10 +281,13 @@ class MainWindow(QMainWindow):
     def _restore_window_layout(self) -> None:
         geometry = self.settings.value(self.SETTINGS_GEOMETRY_KEY)
         state = self.settings.value(self.SETTINGS_STATE_KEY)
+        restored = False
         if geometry is not None:
             self.restoreGeometry(geometry)
         if state is not None:
-            self.restoreState(state, self.SETTINGS_STATE_VERSION)
+            restored = self.restoreState(state, self.SETTINGS_STATE_VERSION)
+        if not restored:
+            self._apply_default_dock_layout()
 
     def _save_window_layout(self) -> None:
         self.settings.setValue(self.SETTINGS_GEOMETRY_KEY, self.saveGeometry())

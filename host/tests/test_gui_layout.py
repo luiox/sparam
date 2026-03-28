@@ -36,12 +36,21 @@ def test_main_window_exposes_signal_lab_layout() -> None:
         assert hasattr(window.sidebar, "write_once_btn")
         assert hasattr(window.sidebar, "remove_var_btn")
 
-        sidebar_dock = window.findChild(QDockWidget, "sidebarDock")
+        control_dock = window.findChild(QDockWidget, "sidebarControlDock")
+        rw_dock = window.findChild(QDockWidget, "sidebarRwDock")
+        variables_dock = window.findChild(QDockWidget, "sidebarVariablesDock")
         inspector_dock = window.findChild(QDockWidget, "inspectorDock")
-        assert sidebar_dock is not None
+        assert control_dock is not None
+        assert rw_dock is not None
+        assert variables_dock is not None
         assert inspector_dock is not None
         assert (
-            window.dockWidgetArea(sidebar_dock) == Qt.DockWidgetArea.LeftDockWidgetArea
+            window.dockWidgetArea(control_dock) == Qt.DockWidgetArea.LeftDockWidgetArea
+        )
+        assert window.dockWidgetArea(rw_dock) == Qt.DockWidgetArea.LeftDockWidgetArea
+        assert (
+            window.dockWidgetArea(variables_dock)
+            == Qt.DockWidgetArea.LeftDockWidgetArea
         )
         assert (
             window.dockWidgetArea(inspector_dock)
@@ -72,12 +81,15 @@ def test_main_window_persists_dock_layout() -> None:
         settings.clear()
 
         first = MainWindow(settings=settings)
-        first.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, first.sidebar_dock)
+        first.addDockWidget(
+            Qt.DockWidgetArea.RightDockWidgetArea,
+            first.sidebar_control_dock,
+        )
         first.close()
 
         second = MainWindow(settings=settings)
         assert (
-            second.dockWidgetArea(second.sidebar_dock)
+            second.dockWidgetArea(second.sidebar_control_dock)
             == Qt.DockWidgetArea.RightDockWidgetArea
         )
         second.close()
