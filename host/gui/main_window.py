@@ -69,6 +69,15 @@ class MainWindow(QMainWindow):
         "int": "int32",
         "float": "float",
     }
+    DTYPE_SUBSTRING_HINTS = (
+        ("uint8", "uint8"),
+        ("int8", "int8"),
+        ("uint16", "uint16"),
+        ("int16", "int16"),
+        ("uint32", "uint32"),
+        ("int32", "int32"),
+        ("float", "float"),
+    )
 
     RATE_OPTIONS = {
         "1 ms": 1,
@@ -503,21 +512,13 @@ class MainWindow(QMainWindow):
         if exact:
             return exact
 
-        for token, label in (
-            ("uint8", "uint8"),
-            ("int8", "int8"),
-            ("uint16", "uint16"),
-            ("int16", "int16"),
-            ("uint32", "uint32"),
-            ("int32", "int32"),
-            ("float", "float"),
-        ):
+        for token, label in self.DTYPE_SUBSTRING_HINTS:
             if token in normalized:
                 return label
 
         try:
             dtype = DataType(variable.dtype_code)
-        except Exception:
+        except ValueError:
             return None
 
         for label, option in self.DTYPE_OPTIONS.items():
