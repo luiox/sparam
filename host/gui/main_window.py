@@ -90,6 +90,7 @@ class MainWindow(QMainWindow):
     SETTINGS_APP = "sparam-gui"
     SETTINGS_GEOMETRY_KEY = "window/geometry"
     SETTINGS_STATE_KEY = "window/state"
+    SETTINGS_LAYOUT_VERSION_KEY = "window/layout_version"
     SETTINGS_STATE_VERSION = 3
 
     def __init__(self, settings: Optional[QSettings] = None) -> None:
@@ -300,11 +301,18 @@ class MainWindow(QMainWindow):
     def _restore_window_layout(self) -> None:
         geometry = self.settings.value(self.SETTINGS_GEOMETRY_KEY)
         state = self.settings.value(self.SETTINGS_STATE_KEY)
+        saved_version = self.settings.value(self.SETTINGS_LAYOUT_VERSION_KEY)
+        try:
+            layout_version = int(saved_version)
+        except (TypeError, ValueError):
+            layout_version = 0
+
         restored = False
-        if geometry is not None:
-            self.restoreGeometry(geometry)
-        if state is not None:
-            restored = self.restoreState(state, self.SETTINGS_STATE_VERSION)
+        if layout_version == self.SETTINGS_STATE_VERSION:
+            if geometry is not None:
+                self.restoreGeometry(geometry)
+            if state is not None:
+                restored = self.restoreState(state, self.SETTINGS_STATE_VERSION)
         if not restored:
             self._apply_default_dock_layout()
         self._clamp_to_available_screen()
@@ -341,6 +349,10 @@ class MainWindow(QMainWindow):
         self.settings.setValue(
             self.SETTINGS_STATE_KEY,
             self.saveState(self.SETTINGS_STATE_VERSION),
+        )
+        self.settings.setValue(
+            self.SETTINGS_LAYOUT_VERSION_KEY,
+            self.SETTINGS_STATE_VERSION,
         )
 
     def _create_summary_card(
