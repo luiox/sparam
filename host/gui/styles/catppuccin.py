@@ -39,12 +39,28 @@ def build_stylesheet() -> str:
     QFrame#toolbar {{
         background: {PANEL_BG};
         border: 1px solid {BORDER};
-        border-radius: 14px;
+        border-radius: 0px;
+    }}
+    QDockWidget {{
+        background: {PANEL_BG};
+        border: 1px solid {BORDER};
+        border-radius: 0px;
+    }}
+    QDockWidget::title {{
+        background: {PANEL_BG};
+        border: 1px solid {BORDER};
+        border-bottom: none;
+        border-radius: 0px;
+        padding: 6px 10px;
+        text-transform: uppercase;
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 1px;
     }}
     QFrame#sidebar {{
         background: {SHELL_BG};
         border: 1px solid {BORDER};
-        border-radius: 16px;
+        border-radius: 0px;
     }}
     QFrame#sectionCard,
     QFrame#summaryCard,
@@ -55,7 +71,7 @@ def build_stylesheet() -> str:
     QFrame#logPanel {{
         background: {PANEL_BG};
         border: 1px solid {BORDER};
-        border-radius: 14px;
+        border-radius: 0px;
     }}
     QFrame#summaryCard,
     QFrame#logPanel,
@@ -71,7 +87,7 @@ def build_stylesheet() -> str:
         background: {INPUT_BG};
         color: {TEXT};
         border: 1px solid {BORDER};
-        border-radius: 10px;
+        border-radius: 0px;
         padding: 7px 10px;
     }}
     QLineEdit,
@@ -115,7 +131,7 @@ def build_stylesheet() -> str:
     QLabel[chip="true"] {{
         background: {INPUT_BG};
         border: 1px solid {BORDER};
-        border-radius: 999px;
+        border-radius: 0px;
         padding: 4px 10px;
         font-size: 11px;
         font-weight: 700;
@@ -138,7 +154,7 @@ def build_stylesheet() -> str:
     }}
     QListWidget::item {{
         padding: 8px 8px;
-        border-radius: 8px;
+        border-radius: 0px;
         margin: 1px 0;
     }}
     QListWidget::item:selected {{

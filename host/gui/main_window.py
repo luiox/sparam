@@ -2,9 +2,10 @@ import csv
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
-from PySide6.QtCore import QObject, Qt, QTimer, Signal
+from PySide6.QtCore import QObject, QSettings, Qt, QTimer, Signal
 from PySide6.QtGui import QCloseEvent
 from PySide6.QtWidgets import (
+    QDockWidget,
     QFileDialog,
     QFrame,
     QHBoxLayout,
@@ -69,8 +70,13 @@ class MainWindow(QMainWindow):
         "30 s": 30.0,
         "Infinite": None,
     }
+    SETTINGS_ORG = "luiox"
+    SETTINGS_APP = "sparam-gui"
+    SETTINGS_GEOMETRY_KEY = "window/geometry"
+    SETTINGS_STATE_KEY = "window/state"
+    SETTINGS_STATE_VERSION = 1
 
-    def __init__(self) -> None:
+    def __init__(self, settings: Optional[QSettings] = None) -> None:
         super().__init__()
         self.setWindowTitle("sparam")
         self.resize(1360, 860)
@@ -88,15 +94,18 @@ class MainWindow(QMainWindow):
         self.monitor_paused = False
         self.connection_fields: Dict[str, QLabel] = {}
         self.monitor_fields: Dict[str, QLabel] = {}
+        self.settings = settings or QSettings(self.SETTINGS_ORG, self.SETTINGS_APP)
         self.restart_monitor_timer = QTimer(self)
         self.restart_monitor_timer.setSingleShot(True)
         self.restart_monitor_timer.timeout.connect(self._restart_monitoring_if_needed)
 
         self._build_ui()
+        self._restore_window_layout()
         self._refresh_ports()
 
     def _build_ui(self) -> None:
         root = QWidget(self)
+        root.setObjectName("workspaceShell")
         self.setCentralWidget(root)
         layout = QVBoxLayout(root)
         layout.setContentsMargins(12, 12, 12, 12)
@@ -117,12 +126,6 @@ class MainWindow(QMainWindow):
         self.sidebar.variable_activated.connect(self._add_variable_monitor)
         self.sidebar.variable_remove_requested.connect(self._remove_variable_monitor)
         self.sidebar.selection_changed.connect(self._preview_variable)
-
-        workspace = QWidget()
-        workspace.setObjectName("workspaceShell")
-        workspace_layout = QHBoxLayout(workspace)
-        workspace_layout.setContentsMargins(0, 0, 0, 0)
-        workspace_layout.setSpacing(10)
 
         center_column = QWidget()
         center_layout = QVBoxLayout(center_column)
@@ -161,9 +164,39 @@ class MainWindow(QMainWindow):
         cards_layout.addWidget(scroll)
         center_layout.addWidget(self.stats_strip)
 
+        layout.addWidget(self.toolbar)
+        layout.addWidget(center_column, 1)
+
+        self._setup_docks()
+        self._refresh_summary_cards()
+
+    def _setup_docks(self) -> None:
+        self.setDockNestingEnabled(True)
+
+        self.sidebar_dock = QDockWidget("Sidebar", self)
+        self.sidebar_dock.setObjectName("sidebarDock")
+        self.sidebar_dock.setFeatures(
+            QDockWidget.DockWidgetFeature.DockWidgetMovable
+            | QDockWidget.DockWidgetFeature.DockWidgetFloatable
+        )
+        self.sidebar_dock.setWidget(self.sidebar)
+        self.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, self.sidebar_dock)
+        self.sidebar_dock.resize(260, 700)
+
+        self.inspector = self._build_inspector_panel()
+        self.inspector_dock = QDockWidget("Inspector", self)
+        self.inspector_dock.setObjectName("inspectorDock")
+        self.inspector_dock.setFeatures(
+            QDockWidget.DockWidgetFeature.DockWidgetMovable
+            | QDockWidget.DockWidgetFeature.DockWidgetFloatable
+        )
+        self.inspector_dock.setWidget(self.inspector)
+        self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self.inspector_dock)
+        self.inspector_dock.resize(340, 700)
+
+    def _build_inspector_panel(self) -> QFrame:
         inspector = QFrame()
         inspector.setObjectName("inspectorPanel")
-        inspector.setFixedWidth(318)
         inspector_layout = QVBoxLayout(inspector)
         inspector_layout.setContentsMargins(12, 12, 12, 12)
         inspector_layout.setSpacing(10)
@@ -184,14 +217,22 @@ class MainWindow(QMainWindow):
         inspector_layout.addWidget(connection_card)
         inspector_layout.addWidget(monitor_card)
         inspector_layout.addWidget(self.log_panel, 1)
+        return inspector
 
-        workspace_layout.addWidget(self.sidebar)
-        workspace_layout.addWidget(center_column, 1)
-        workspace_layout.addWidget(inspector)
+    def _restore_window_layout(self) -> None:
+        geometry = self.settings.value(self.SETTINGS_GEOMETRY_KEY)
+        state = self.settings.value(self.SETTINGS_STATE_KEY)
+        if geometry is not None:
+            self.restoreGeometry(geometry)
+        if state is not None:
+            self.restoreState(state, self.SETTINGS_STATE_VERSION)
 
-        layout.addWidget(self.toolbar)
-        layout.addWidget(workspace, 1)
-        self._refresh_summary_cards()
+    def _save_window_layout(self) -> None:
+        self.settings.setValue(self.SETTINGS_GEOMETRY_KEY, self.saveGeometry())
+        self.settings.setValue(
+            self.SETTINGS_STATE_KEY,
+            self.saveState(self.SETTINGS_STATE_VERSION),
+        )
 
     def _create_summary_card(
         self, title: str, subtitle: str, field_names: List[str]
@@ -579,6 +620,7 @@ class MainWindow(QMainWindow):
 
     def closeEvent(self, event: QCloseEvent) -> None:  # noqa: N802
         self.restart_monitor_timer.stop()
+        self._save_window_layout()
         if self.device_manager:
             self.device_manager.stop_monitor()
         if self.conn and self.conn.is_open():

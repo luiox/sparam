@@ -36,7 +36,7 @@ class Sidebar(QFrame):
     def __init__(self) -> None:
         super().__init__()
         self.setObjectName("sidebar")
-        self.setFixedWidth(232)
+        self.setMinimumWidth(220)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(12, 12, 12, 12)

@@ -2,6 +2,7 @@ import importlib.util
 import struct
 import sys
 from pathlib import Path
+from tempfile import TemporaryDirectory
 from typing import Any, List, Optional, Tuple, cast
 from unittest import SkipTest
 
@@ -36,37 +37,45 @@ def _require_gui_stack() -> None:
 def test_main_window_handles_rapid_variable_events_without_duplicates() -> None:
     _require_gui_stack()
 
+    from PySide6.QtCore import QSettings
     from PySide6.QtWidgets import QApplication
 
     from gui.main_window import MainWindow
     from sparam.elf_parser import Variable
 
     app = QApplication.instance() or QApplication([])
-    window = MainWindow()
+    with TemporaryDirectory() as temp_dir:
+        settings = QSettings(
+            str(Path(temp_dir) / "rapid-events.ini"),
+            QSettings.Format.IniFormat,
+        )
+        settings.clear()
+        window = MainWindow(settings=settings)
 
-    variable = Variable("motor_speed", 0x20000000, 4, "uint32_t")
-    window.parser.variables = {variable.name: variable}
-    window.sidebar.set_variables([variable])
+        variable = Variable("motor_speed", 0x20000000, 4, "uint32_t")
+        window.parser.variables = {variable.name: variable}
+        window.sidebar.set_variables([variable])
 
-    for _ in range(120):
-        window.sidebar.variable_activated.emit(variable.name)
-        app.processEvents()
+        for _ in range(120):
+            window.sidebar.variable_activated.emit(variable.name)
+            app.processEvents()
 
-    assert window.monitored_names == [variable.name]
+        assert window.monitored_names == [variable.name]
 
-    for _ in range(120):
-        window.sidebar.variable_remove_requested.emit(variable.name)
-        app.processEvents()
+        for _ in range(120):
+            window.sidebar.variable_remove_requested.emit(variable.name)
+            app.processEvents()
 
-    assert window.monitored_names == []
+        assert window.monitored_names == []
 
-    window.close()
+        window.close()
     app.quit()
 
 
 def test_write_once_uses_integer_parsing_for_uint32() -> None:
     _require_gui_stack()
 
+    from PySide6.QtCore import QSettings
     from PySide6.QtWidgets import QApplication
 
     from gui.main_window import MainWindow
@@ -74,24 +83,30 @@ def test_write_once_uses_integer_parsing_for_uint32() -> None:
     from sparam.elf_parser import Variable
 
     app = QApplication.instance() or QApplication([])
-    window = MainWindow()
+    with TemporaryDirectory() as temp_dir:
+        settings = QSettings(
+            str(Path(temp_dir) / "write-once.ini"),
+            QSettings.Format.IniFormat,
+        )
+        settings.clear()
+        window = MainWindow(settings=settings)
 
-    variable = Variable("motor_speed", 0x20000000, 4, "uint32_t")
-    window.parser.variables = {variable.name: variable}
-    window.sidebar.set_variables([variable])
-    window.sidebar.list_widget.setCurrentRow(0)
-    window.sidebar.dtype_combo.setCurrentText("uint32")
-    window.sidebar.set_rw_value("0x2A")
+        variable = Variable("motor_speed", 0x20000000, 4, "uint32_t")
+        window.parser.variables = {variable.name: variable}
+        window.sidebar.set_variables([variable])
+        window.sidebar.list_widget.setCurrentRow(0)
+        window.sidebar.dtype_combo.setCurrentText("uint32")
+        window.sidebar.set_rw_value("0x2A")
 
-    fake_device = _FakeDevice()
-    window.device = cast(Device, fake_device)
+        fake_device = _FakeDevice()
+        window.device = cast(Device, fake_device)
 
-    window._write_once_variable()
+        window._write_once_variable()
 
-    assert len(fake_device.write_calls) == 1
-    _, value_bytes, _, dtype = fake_device.write_calls[0]
-    assert value_bytes == struct.pack("<I", 42)
-    assert dtype == DataType.UINT32
+        assert len(fake_device.write_calls) == 1
+        _, value_bytes, _, dtype = fake_device.write_calls[0]
+        assert value_bytes == struct.pack("<I", 42)
+        assert dtype == DataType.UINT32
 
-    window.close()
+        window.close()
     app.quit()

@@ -61,25 +61,27 @@ host/gui/
 3. 架构策略：子面板改为 Dock，可停靠、可拉伸
 4. 持久化策略：布局持久化为 M3 必做项（重启恢复）
 
-## 5. M3 实施建议（三阶段）
+## 5. M3 实施状态（已完成）
 
-### 阶段 A：样式标准化（不改行为）
+### 5.1 样式改造（默认无圆角）
 
-- 统一圆角、间距、字号 token
-- 清理组件内硬编码样式
-- 默认采用无圆角配置
+- `styles/catppuccin.py` 已统一为直角风格（`border-radius: 0px`）
+- 主要面板、按钮、输入框、列表项、状态芯片已切换为无圆角
+- `widgets/value_card.py` 左侧色条去除圆角硬编码
 
-### 阶段 B：Dock 化布局改造
+### 5.2 Dock 化布局（左-中-右）
 
-- 将 Sidebar 与 Inspector 转为 Dock 面板
-- 支持停靠、拖出、拉伸
-- 保持监测与读写交互行为一致
+- `main_window.py` 使用 `QDockWidget` 承载 Sidebar 与 Inspector
+- 左侧：`sidebarDock`（Sidebar）
+- 中央：Waveform + Signal Cards
+- 右侧：`inspectorDock`（Connection/Monitor Summary + Log）
 
-### 阶段 C：布局持久化
+### 5.3 布局持久化
 
-- 保存 Dock 位置和尺寸
-- 重启恢复用户布局
-- 提供回退默认布局入口
+- `main_window.py` 使用 `QSettings` 保存与恢复窗口布局
+- 保存内容：`window/geometry` 与 `window/state`
+- 恢复时机：窗口初始化阶段
+- 保存时机：`closeEvent`
 
 ## 6. 风险与验证点
 
@@ -95,6 +97,10 @@ host/gui/
 - Read Once / Write Once 稳定
 - Dock 可停靠、可拖出、可拉伸
 - 重启后布局恢复一致
+
+当前回归结果：
+
+- `ruff format`, `ruff check`, `mypy`, `pytest` 全部通过
 
 ## 7. 相关文档
 
