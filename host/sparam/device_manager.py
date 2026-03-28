@@ -26,6 +26,14 @@ class DeviceManager:
     def remove_callback(self, callback: Callable[[SamplePoint], None]) -> None:
         self._callbacks = [item for item in self._callbacks if item != callback]
 
+    def _stop_receive_if_started(self) -> None:
+        if not self._receiving_started:
+            return
+
+        if hasattr(self.device.connection, "stop_receive"):
+            self.device.connection.stop_receive()
+        self._receiving_started = False
+
     def start_monitor(self, variables: List[Variable], rate: int) -> bool:
         if not self._receiving_started and hasattr(
             self.device.connection, "start_receive"
@@ -33,10 +41,15 @@ class DeviceManager:
             self.device.connection.start_receive(self.device.on_frame_received)
             self._receiving_started = True
 
-        return self.device.start_monitor(variables, rate, self._on_data)
+        started = self.device.start_monitor(variables, rate, self._on_data)
+        if not started:
+            self._stop_receive_if_started()
+        return started
 
     def stop_monitor(self) -> bool:
-        return self.device.stop_monitor()
+        stopped = self.device.stop_monitor()
+        self._stop_receive_if_started()
+        return stopped
 
     def _on_data(self, name: str, raw_value: bytes) -> None:
         variable = self.device.get_variable(name)

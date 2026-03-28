@@ -1,4 +1,4 @@
-from typing import Iterable, Optional, cast
+from typing import Dict, Iterable, List, Optional, cast
 
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
@@ -36,17 +36,65 @@ class Sidebar(QFrame):
     def __init__(self) -> None:
         super().__init__()
         self.setObjectName("sidebar")
-        self.setFixedWidth(232)
 
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(12, 12, 12, 12)
-        layout.setSpacing(10)
+        self._sections: List[QFrame] = []
+        self._section_content_widgets: Dict[QFrame, QWidget] = {}
+        self._section_toggle_buttons: Dict[QFrame, QPushButton] = {}
 
-        layout.addWidget(self._build_connection_section())
-        layout.addWidget(self._build_monitor_section())
-        layout.addWidget(self._build_io_section())
-        layout.addWidget(self._build_export_section())
-        layout.addWidget(self._build_variable_section(), 1)
+        self._connection_section = self._build_connection_section()
+        self._monitor_section = self._build_monitor_section()
+        self._export_section = self._build_export_section()
+        self._io_section = self._build_io_section()
+        self._variable_section = self._build_variable_section()
+
+        self._control_panel = self._build_dock_panel()
+        control_layout = cast(QVBoxLayout, self._control_panel.layout())
+        self.toggle_all_btn = QPushButton("Collapse All")
+        self.toggle_all_btn.setProperty("micro", True)
+        self.toggle_all_btn.clicked.connect(self.toggle_all_sections)
+        control_layout.addWidget(self.toggle_all_btn)
+        control_layout.addWidget(self._connection_section)
+        control_layout.addWidget(self._monitor_section)
+        control_layout.addWidget(self._export_section)
+        control_layout.addStretch(1)
+
+        self._io_panel = self._build_dock_panel()
+        io_layout = cast(QVBoxLayout, self._io_panel.layout())
+        io_layout.addWidget(self._io_section)
+        io_layout.addStretch(1)
+
+        self._variable_panel = self._build_dock_panel()
+        variable_layout = cast(QVBoxLayout, self._variable_panel.layout())
+        variable_layout.addWidget(self._variable_section, 1)
+
+        self._sync_toggle_all_button_text()
+
+    def control_panel_widget(self) -> QFrame:
+        return self._control_panel
+
+    def io_panel_widget(self) -> QFrame:
+        return self._io_panel
+
+    def variable_panel_widget(self) -> QFrame:
+        return self._variable_panel
+
+    def toggle_all_sections(self) -> None:
+        target_expanded = not self.all_sections_expanded()
+        for section in self._sections:
+            self._set_section_expanded(section, target_expanded)
+        self._sync_toggle_all_button_text()
+
+    def all_sections_expanded(self) -> bool:
+        return all(self._is_section_expanded(section) for section in self._sections)
+
+    def _build_dock_panel(self) -> QFrame:
+        panel = QFrame()
+        panel.setObjectName("sidebar")
+        panel.setMinimumWidth(220)
+        layout = QVBoxLayout(panel)
+        layout.setContentsMargins(8, 8, 8, 8)
+        layout.setSpacing(8)
+        return panel
 
     def _build_connection_section(self) -> QFrame:
         section = self._section_shell("Transport")
@@ -74,7 +122,7 @@ class Sidebar(QFrame):
         body.addWidget(self._field("Device", self.device_id_spin))
 
         row = QHBoxLayout()
-        row.setSpacing(8)
+        row.setSpacing(6)
         row.addWidget(self.connect_btn, 1)
         row.addWidget(self.refresh_btn, 1)
         body.addLayout(row)
@@ -135,7 +183,7 @@ class Sidebar(QFrame):
         self.write_once_btn.clicked.connect(self.write_once_requested.emit)
 
         row = QHBoxLayout()
-        row.setSpacing(8)
+        row.setSpacing(6)
         row.addWidget(self.read_once_btn, 1)
         row.addWidget(self.write_once_btn, 1)
 
@@ -150,6 +198,7 @@ class Sidebar(QFrame):
 
         helper = QLabel("Double-click adds monitor; remove with button below.")
         helper.setProperty("muted", True)
+        helper.setWordWrap(True)
         self.filter_edit = QLineEdit()
         self.filter_edit.setPlaceholderText("Search variables")
         self.filter_edit.textChanged.connect(self._apply_filter)
@@ -171,19 +220,55 @@ class Sidebar(QFrame):
         shell = QFrame()
         shell.setObjectName("sectionCard")
         outer = QVBoxLayout(shell)
-        outer.setContentsMargins(10, 10, 10, 10)
-        outer.setSpacing(8)
+        outer.setContentsMargins(8, 8, 8, 8)
+        outer.setSpacing(6)
+
+        header_row = QHBoxLayout()
+        header_row.setContentsMargins(0, 0, 0, 0)
+        header_row.setSpacing(6)
 
         header = QLabel(title)
         header.setProperty("sectionTitle", True)
+        toggle_btn = QPushButton("-")
+        toggle_btn.setProperty("micro", True)
+
         content = QWidget()
         content_layout = QVBoxLayout(content)
         content_layout.setContentsMargins(0, 0, 0, 0)
-        content_layout.setSpacing(7)
+        content_layout.setSpacing(5)
 
-        outer.addWidget(header)
+        header_row.addWidget(header)
+        header_row.addStretch(1)
+        header_row.addWidget(toggle_btn)
+        outer.addLayout(header_row)
         outer.addWidget(content)
+
+        self._sections.append(shell)
+        self._section_content_widgets[shell] = content
+        self._section_toggle_buttons[shell] = toggle_btn
+        toggle_btn.clicked.connect(
+            lambda _checked=False, section=shell: self._toggle_section(section)
+        )
         return shell
+
+    def _is_section_expanded(self, section: QFrame) -> bool:
+        content = self._section_content_widgets[section]
+        return not content.isHidden()
+
+    def _set_section_expanded(self, section: QFrame, expanded: bool) -> None:
+        content = self._section_content_widgets[section]
+        content.setVisible(expanded)
+        button = self._section_toggle_buttons[section]
+        button.setText("-" if expanded else "+")
+
+    def _toggle_section(self, section: QFrame) -> None:
+        self._set_section_expanded(section, not self._is_section_expanded(section))
+        self._sync_toggle_all_button_text()
+
+    def _sync_toggle_all_button_text(self) -> None:
+        self.toggle_all_btn.setText(
+            "Collapse All" if self.all_sections_expanded() else "Expand All"
+        )
 
     def _section_body(self, section: QFrame) -> QVBoxLayout:
         section_layout = cast(QVBoxLayout, section.layout())
@@ -199,7 +284,7 @@ class Sidebar(QFrame):
         wrap = QWidget()
         layout = QVBoxLayout(wrap)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(3)
+        layout.setSpacing(2)
         caption = QLabel(label)
         caption.setProperty("muted", True)
         layout.addWidget(caption)
@@ -252,6 +337,11 @@ class Sidebar(QFrame):
 
     def current_dtype_label(self) -> str:
         return self.dtype_combo.currentText().strip()
+
+    def set_dtype_label(self, label: str) -> None:
+        index = self.dtype_combo.findText(label)
+        if index >= 0:
+            self.dtype_combo.setCurrentIndex(index)
 
     def current_write_value(self) -> str:
         return self.value_edit.text().strip()

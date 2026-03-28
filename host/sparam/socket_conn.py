@@ -17,6 +17,16 @@ class SocketConnection:
         self._on_frame: Optional[Callable[[Frame], None]] = None
         self._rx_buffer = bytearray()
 
+    def is_receive_running(self) -> bool:
+        return bool(self._rx_thread and self._rx_thread.is_alive())
+
+    def stop_receive(self) -> None:
+        self._stop_event.set()
+        if self._rx_thread and self._rx_thread.is_alive():
+            self._rx_thread.join(timeout=1.0)
+        self._rx_thread = None
+        self._on_frame = None
+
     def open(self) -> bool:
         try:
             self._sock = socket.create_connection(
@@ -29,10 +39,7 @@ class SocketConnection:
             return False
 
     def close(self) -> None:
-        self._stop_event.set()
-        if self._rx_thread:
-            self._rx_thread.join(timeout=1.0)
-            self._rx_thread = None
+        self.stop_receive()
 
         if self._sock:
             try:
@@ -89,6 +96,8 @@ class SocketConnection:
 
     def start_receive(self, on_frame: Callable[[Frame], None]) -> None:
         self._on_frame = on_frame
+        if self.is_receive_running():
+            return
         self._stop_event.clear()
         self._rx_thread = Thread(target=self._receive_loop, daemon=True)
         self._rx_thread.start()

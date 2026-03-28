@@ -18,11 +18,7 @@ class ValueCard(QFrame):
 
         stripe = QWidget()
         stripe.setFixedWidth(2)
-        stripe.setStyleSheet(
-            f"background: {color}; "
-            "border-top-left-radius: 14px; "
-            "border-bottom-left-radius: 14px;"
-        )
+        stripe.setStyleSheet(f"background: {color};")
 
         body = QWidget()
         body_layout = QVBoxLayout(body)

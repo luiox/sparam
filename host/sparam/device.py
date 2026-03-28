@@ -74,7 +74,11 @@ class Device:
             return response
 
         # Fallback for flaky serial drivers: do one direct blocking exchange.
-        if isinstance(self.connection, SerialConnection) and self.connection.is_open():
+        if (
+            isinstance(self.connection, SerialConnection)
+            and self.connection.is_open()
+            and not self.connection.is_receive_running()
+        ):
             try:
                 ser = self.connection._serial
                 if ser is None:

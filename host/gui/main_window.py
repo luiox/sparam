@@ -2,9 +2,11 @@ import csv
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
-from PySide6.QtCore import QObject, Qt, QTimer, Signal
+from PySide6.QtCore import QObject, QSettings, Qt, QTimer, Signal
 from PySide6.QtGui import QCloseEvent
 from PySide6.QtWidgets import (
+    QApplication,
+    QDockWidget,
     QFileDialog,
     QFrame,
     QHBoxLayout,
@@ -52,6 +54,30 @@ class MainWindow(QMainWindow):
         "int32": DataType.INT32,
         "float": DataType.FLOAT,
     }
+    DTYPE_TYPE_HINTS = {
+        "uint8_t": "uint8",
+        "unsigned char": "uint8",
+        "int8_t": "int8",
+        "signed char": "int8",
+        "uint16_t": "uint16",
+        "unsigned short": "uint16",
+        "int16_t": "int16",
+        "short": "int16",
+        "uint32_t": "uint32",
+        "unsigned int": "uint32",
+        "int32_t": "int32",
+        "int": "int32",
+        "float": "float",
+    }
+    DTYPE_SUBSTRING_HINTS = (
+        ("uint8", "uint8"),
+        ("int8", "int8"),
+        ("uint16", "uint16"),
+        ("int16", "int16"),
+        ("uint32", "uint32"),
+        ("int32", "int32"),
+        ("float", "float"),
+    )
 
     RATE_OPTIONS = {
         "1 ms": 1,
@@ -69,11 +95,20 @@ class MainWindow(QMainWindow):
         "30 s": 30.0,
         "Infinite": None,
     }
+    SETTINGS_ORG = "luiox"
+    SETTINGS_APP = "sparam-gui"
+    SETTINGS_GEOMETRY_KEY = "window/geometry"
+    SETTINGS_STATE_KEY = "window/state"
+    SETTINGS_LAYOUT_VERSION_KEY = "window/layout_version"
+    SETTINGS_STATE_VERSION = 3
 
-    def __init__(self) -> None:
+    def __init__(self, settings: Optional[QSettings] = None) -> None:
         super().__init__()
         self.setWindowTitle("sparam")
         self.resize(1360, 860)
+        # Keep a conservative explicit minimum size so dock minimum hints do not
+        # force the top-level window beyond the available monitor area.
+        self.setMinimumSize(960, 620)
 
         self.parser = ElfParser()
         self.current_symbol_path: Optional[str] = None
@@ -88,19 +123,22 @@ class MainWindow(QMainWindow):
         self.monitor_paused = False
         self.connection_fields: Dict[str, QLabel] = {}
         self.monitor_fields: Dict[str, QLabel] = {}
+        self.settings = settings or QSettings(self.SETTINGS_ORG, self.SETTINGS_APP)
         self.restart_monitor_timer = QTimer(self)
         self.restart_monitor_timer.setSingleShot(True)
         self.restart_monitor_timer.timeout.connect(self._restart_monitoring_if_needed)
 
         self._build_ui()
+        self._restore_window_layout()
         self._refresh_ports()
 
     def _build_ui(self) -> None:
         root = QWidget(self)
+        root.setObjectName("workspaceShell")
         self.setCentralWidget(root)
         layout = QVBoxLayout(root)
-        layout.setContentsMargins(12, 12, 12, 12)
-        layout.setSpacing(10)
+        layout.setContentsMargins(8, 8, 8, 8)
+        layout.setSpacing(8)
 
         self.toolbar = Toolbar()
         self.sidebar = Sidebar()
@@ -118,16 +156,10 @@ class MainWindow(QMainWindow):
         self.sidebar.variable_remove_requested.connect(self._remove_variable_monitor)
         self.sidebar.selection_changed.connect(self._preview_variable)
 
-        workspace = QWidget()
-        workspace.setObjectName("workspaceShell")
-        workspace_layout = QHBoxLayout(workspace)
-        workspace_layout.setContentsMargins(0, 0, 0, 0)
-        workspace_layout.setSpacing(10)
-
         center_column = QWidget()
         center_layout = QVBoxLayout(center_column)
         center_layout.setContentsMargins(0, 0, 0, 0)
-        center_layout.setSpacing(10)
+        center_layout.setSpacing(8)
 
         self.waveform = WaveformPlot()
         center_layout.addWidget(self.waveform, 1)
@@ -135,8 +167,8 @@ class MainWindow(QMainWindow):
         self.stats_strip = QFrame()
         self.stats_strip.setObjectName("signalStatsStrip")
         cards_layout = QVBoxLayout(self.stats_strip)
-        cards_layout.setContentsMargins(12, 10, 12, 12)
-        cards_layout.setSpacing(8)
+        cards_layout.setContentsMargins(8, 8, 8, 8)
+        cards_layout.setSpacing(6)
 
         stats_title_row = QHBoxLayout()
         stats_title_row.setContentsMargins(0, 0, 0, 0)
@@ -161,12 +193,101 @@ class MainWindow(QMainWindow):
         cards_layout.addWidget(scroll)
         center_layout.addWidget(self.stats_strip)
 
+        layout.addWidget(self.toolbar)
+        layout.addWidget(center_column, 1)
+
+        self._setup_docks()
+        self._refresh_summary_cards()
+
+    def _setup_docks(self) -> None:
+        self.setDockNestingEnabled(True)
+
+        self.sidebar_control_dock = QDockWidget("Transport & Monitor", self)
+        self.sidebar_control_dock.setObjectName("sidebarControlDock")
+        self.sidebar_control_dock.setFeatures(
+            QDockWidget.DockWidgetFeature.DockWidgetMovable
+            | QDockWidget.DockWidgetFeature.DockWidgetFloatable
+        )
+        self.sidebar_control_dock.setWidget(self.sidebar.control_panel_widget())
+
+        self.sidebar_rw_dock = QDockWidget("Single Read/Write", self)
+        self.sidebar_rw_dock.setObjectName("sidebarRwDock")
+        self.sidebar_rw_dock.setFeatures(
+            QDockWidget.DockWidgetFeature.DockWidgetMovable
+            | QDockWidget.DockWidgetFeature.DockWidgetFloatable
+        )
+        self.sidebar_rw_dock.setWidget(self.sidebar.io_panel_widget())
+
+        self.sidebar_variables_dock = QDockWidget("Variables", self)
+        self.sidebar_variables_dock.setObjectName("sidebarVariablesDock")
+        self.sidebar_variables_dock.setFeatures(
+            QDockWidget.DockWidgetFeature.DockWidgetMovable
+            | QDockWidget.DockWidgetFeature.DockWidgetFloatable
+        )
+        self.sidebar_variables_dock.setWidget(self.sidebar.variable_panel_widget())
+
+        self.inspector = self._build_inspector_panel()
+        self.inspector_dock = QDockWidget("Inspector", self)
+        self.inspector_dock.setObjectName("inspectorDock")
+        self.inspector_dock.setFeatures(
+            QDockWidget.DockWidgetFeature.DockWidgetMovable
+            | QDockWidget.DockWidgetFeature.DockWidgetFloatable
+        )
+        self.inspector_dock.setWidget(self.inspector)
+
+        # Keep this alias for compatibility with existing callers/tests.
+        self.sidebar_dock = self.sidebar_control_dock
+
+        self._apply_default_dock_layout()
+
+    def _apply_default_dock_layout(self) -> None:
+        self.addDockWidget(
+            Qt.DockWidgetArea.LeftDockWidgetArea,
+            self.sidebar_control_dock,
+        )
+        self.addDockWidget(
+            Qt.DockWidgetArea.LeftDockWidgetArea,
+            self.sidebar_rw_dock,
+        )
+        self.splitDockWidget(
+            self.sidebar_control_dock,
+            self.sidebar_rw_dock,
+            Qt.Orientation.Vertical,
+        )
+        self.addDockWidget(
+            Qt.DockWidgetArea.LeftDockWidgetArea,
+            self.sidebar_variables_dock,
+        )
+        self.splitDockWidget(
+            self.sidebar_rw_dock,
+            self.sidebar_variables_dock,
+            Qt.Orientation.Vertical,
+        )
+
+        self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self.inspector_dock)
+
+        # Default split: compact 260px left rail and flexible center/right area.
+        self.resizeDocks(
+            [self.sidebar_control_dock, self.inspector_dock],
+            [260, 340],
+            Qt.Orientation.Horizontal,
+        )
+        self.resizeDocks(
+            [
+                self.sidebar_control_dock,
+                self.sidebar_rw_dock,
+                self.sidebar_variables_dock,
+            ],
+            [220, 170, 360],
+            Qt.Orientation.Vertical,
+        )
+
+    def _build_inspector_panel(self) -> QFrame:
         inspector = QFrame()
         inspector.setObjectName("inspectorPanel")
-        inspector.setFixedWidth(318)
         inspector_layout = QVBoxLayout(inspector)
-        inspector_layout.setContentsMargins(12, 12, 12, 12)
-        inspector_layout.setSpacing(10)
+        inspector_layout.setContentsMargins(8, 8, 8, 8)
+        inspector_layout.setSpacing(8)
 
         connection_card, self.connection_fields = self._create_summary_card(
             "Connection Overview",
@@ -184,14 +305,66 @@ class MainWindow(QMainWindow):
         inspector_layout.addWidget(connection_card)
         inspector_layout.addWidget(monitor_card)
         inspector_layout.addWidget(self.log_panel, 1)
+        return inspector
 
-        workspace_layout.addWidget(self.sidebar)
-        workspace_layout.addWidget(center_column, 1)
-        workspace_layout.addWidget(inspector)
+    def _restore_window_layout(self) -> None:
+        geometry = self.settings.value(self.SETTINGS_GEOMETRY_KEY)
+        state = self.settings.value(self.SETTINGS_STATE_KEY)
+        saved_version = self.settings.value(self.SETTINGS_LAYOUT_VERSION_KEY)
+        try:
+            layout_version = int(saved_version)
+        except (TypeError, ValueError):
+            layout_version = 0
 
-        layout.addWidget(self.toolbar)
-        layout.addWidget(workspace, 1)
-        self._refresh_summary_cards()
+        restored = False
+        if layout_version == self.SETTINGS_STATE_VERSION:
+            if geometry is not None:
+                self.restoreGeometry(geometry)
+            if state is not None:
+                restored = self.restoreState(state, self.SETTINGS_STATE_VERSION)
+        if not restored:
+            self._apply_default_dock_layout()
+        self._clamp_to_available_screen()
+
+    def _clamp_to_available_screen(self) -> None:
+        screen = self.screen() or QApplication.primaryScreen()
+        if screen is None:
+            return
+
+        available = screen.availableGeometry()
+        if available.width() <= 0 or available.height() <= 0:
+            return
+
+        max_width = max(640, available.width())
+        max_height = max(480, available.height())
+        clamped_width = min(self.width(), max_width)
+        clamped_height = min(self.height(), max_height)
+        if clamped_width != self.width() or clamped_height != self.height():
+            self.resize(clamped_width, clamped_height)
+
+        max_x = max(available.left(), available.right() - self.width() + 1)
+        max_y = max(available.top(), available.bottom() - self.height() + 1)
+        clamped_x = min(max(self.x(), available.left()), max_x)
+        clamped_y = min(max(self.y(), available.top()), max_y)
+        if clamped_x != self.x() or clamped_y != self.y():
+            self.move(clamped_x, clamped_y)
+
+    def _notify_runtime_warning(self, title: str, detail: str) -> None:
+        full = f"{title}: {detail}"
+        brief = full if len(full) <= 110 else f"{full[:107]}..."
+        self.toolbar.set_status_text(brief)
+        self._log(full)
+
+    def _save_window_layout(self) -> None:
+        self.settings.setValue(self.SETTINGS_GEOMETRY_KEY, self.saveGeometry())
+        self.settings.setValue(
+            self.SETTINGS_STATE_KEY,
+            self.saveState(self.SETTINGS_STATE_VERSION),
+        )
+        self.settings.setValue(
+            self.SETTINGS_LAYOUT_VERSION_KEY,
+            self.SETTINGS_STATE_VERSION,
+        )
 
     def _create_summary_card(
         self, title: str, subtitle: str, field_names: List[str]
@@ -199,8 +372,8 @@ class MainWindow(QMainWindow):
         card = QFrame()
         card.setObjectName("summaryCard")
         layout = QVBoxLayout(card)
-        layout.setContentsMargins(12, 10, 12, 12)
-        layout.setSpacing(8)
+        layout.setContentsMargins(8, 8, 8, 8)
+        layout.setSpacing(6)
 
         title_label = QLabel(title)
         title_label.setProperty("sectionTitle", True)
@@ -323,9 +496,35 @@ class MainWindow(QMainWindow):
         variable = self.parser.get_variable(name)
         if not variable:
             return
+        self._sync_dtype_with_variable(variable)
         self.toolbar.set_status_text(
             f"{variable.name}  0x{variable.address:08X}  {variable.var_type}"
         )
+
+    def _sync_dtype_with_variable(self, variable: Variable) -> None:
+        label = self._dtype_label_for_variable(variable)
+        if label:
+            self.sidebar.set_dtype_label(label)
+
+    def _dtype_label_for_variable(self, variable: Variable) -> Optional[str]:
+        normalized = variable.var_type.strip().lower()
+        exact = self.DTYPE_TYPE_HINTS.get(normalized)
+        if exact:
+            return exact
+
+        for token, label in self.DTYPE_SUBSTRING_HINTS:
+            if token in normalized:
+                return label
+
+        try:
+            dtype = DataType(variable.dtype_code)
+        except ValueError:
+            return None
+
+        for label, option in self.DTYPE_OPTIONS.items():
+            if option == dtype:
+                return label
+        return None
 
     def _add_variable_monitor(self, name: str) -> None:
         variable = self.parser.get_variable(name)
@@ -435,13 +634,23 @@ class MainWindow(QMainWindow):
             return
 
         was_streaming = self._pause_stream_for_single_io()
-        value_bytes = self.device.read_value(variable, timeout=1.0)
+        try:
+            value_bytes = self.device.read_value(variable, timeout=1.0)
+        except Exception as exc:
+            self._resume_stream_after_single_io(was_streaming)
+            self._notify_runtime_warning(
+                "Read Once",
+                f"{variable.name} failed ({exc})",
+            )
+            return
         self._resume_stream_after_single_io(was_streaming)
 
         if value_bytes is None:
             error_reason = self.device.last_error or "unknown error"
-            self._log(f"READ FAIL {variable.name}: {error_reason}")
-            QMessageBox.warning(self, "Read Once", "Read failed.")
+            self._notify_runtime_warning(
+                "Read Once",
+                f"{variable.name} failed ({error_reason})",
+            )
             return
 
         try:
@@ -487,18 +696,28 @@ class MainWindow(QMainWindow):
             return
 
         was_streaming = self._pause_stream_for_single_io()
-        ok = self.device.write_single(
-            variable,
-            value_bytes,
-            timeout=1.0,
-            dtype_override=dtype,
-        )
+        try:
+            ok = self.device.write_single(
+                variable,
+                value_bytes,
+                timeout=1.0,
+                dtype_override=dtype,
+            )
+        except Exception as exc:
+            self._resume_stream_after_single_io(was_streaming)
+            self._notify_runtime_warning(
+                "Write Once",
+                f"{variable.name} failed ({exc})",
+            )
+            return
         self._resume_stream_after_single_io(was_streaming)
 
         if not ok:
             error_reason = self.device.last_error or "unknown error"
-            self._log(f"WRITE FAIL {variable.name}: {error_reason}")
-            QMessageBox.warning(self, "Write Once", "Write failed.")
+            self._notify_runtime_warning(
+                "Write Once",
+                f"{variable.name} failed ({error_reason})",
+            )
             return
 
         self._log(f"WRITE {variable.name} <= {raw_text} ({dtype.name})")
@@ -579,6 +798,7 @@ class MainWindow(QMainWindow):
 
     def closeEvent(self, event: QCloseEvent) -> None:  # noqa: N802
         self.restart_monitor_timer.stop()
+        self._save_window_layout()
         if self.device_manager:
             self.device_manager.stop_monitor()
         if self.conn and self.conn.is_open():

@@ -28,7 +28,7 @@ def build_stylesheet() -> str:
         background: {PAGE_BG};
         color: {TEXT};
         font-family: Monospace;
-        font-size: 12px;
+        font-size: 9pt;
     }}
     QMainWindow {{
         background: {PAGE_BG};
@@ -39,12 +39,28 @@ def build_stylesheet() -> str:
     QFrame#toolbar {{
         background: {PANEL_BG};
         border: 1px solid {BORDER};
-        border-radius: 14px;
+        border-radius: 0px;
+    }}
+    QDockWidget {{
+        background: {PANEL_BG};
+        border: 1px solid {BORDER};
+        border-radius: 0px;
+    }}
+    QDockWidget::title {{
+        background: {PANEL_BG};
+        border: 1px solid {BORDER};
+        border-bottom: none;
+        border-radius: 0px;
+        padding: 4px 8px;
+        text-transform: uppercase;
+        font-size: 10px;
+        font-weight: 700;
+        letter-spacing: 1px;
     }}
     QFrame#sidebar {{
         background: {SHELL_BG};
         border: 1px solid {BORDER};
-        border-radius: 16px;
+        border-radius: 0px;
     }}
     QFrame#sectionCard,
     QFrame#summaryCard,
@@ -55,7 +71,7 @@ def build_stylesheet() -> str:
     QFrame#logPanel {{
         background: {PANEL_BG};
         border: 1px solid {BORDER};
-        border-radius: 14px;
+        border-radius: 0px;
     }}
     QFrame#summaryCard,
     QFrame#logPanel,
@@ -71,16 +87,22 @@ def build_stylesheet() -> str:
         background: {INPUT_BG};
         color: {TEXT};
         border: 1px solid {BORDER};
-        border-radius: 10px;
-        padding: 7px 10px;
+        border-radius: 0px;
+        padding: 5px 8px;
     }}
     QLineEdit,
     QComboBox,
     QSpinBox {{
-        min-height: 18px;
+        min-height: 16px;
     }}
     QPushButton {{
         font-weight: 600;
+    }}
+    QPushButton[micro="true"] {{
+        padding: 2px 6px;
+        min-height: 0px;
+        font-size: 10px;
+        font-weight: 700;
     }}
     QPushButton:hover {{
         background: {CARD_BG};
@@ -101,12 +123,12 @@ def build_stylesheet() -> str:
         color: {MUTED};
     }}
     QLabel[hero="true"] {{
-        font-size: 15px;
+        font-size: 14px;
         font-weight: 700;
         letter-spacing: 0.4px;
     }}
     QLabel[sectionTitle="true"] {{
-        font-size: 11px;
+        font-size: 10px;
         font-weight: 700;
         letter-spacing: 1.0px;
         text-transform: uppercase;
@@ -115,9 +137,9 @@ def build_stylesheet() -> str:
     QLabel[chip="true"] {{
         background: {INPUT_BG};
         border: 1px solid {BORDER};
-        border-radius: 999px;
-        padding: 4px 10px;
-        font-size: 11px;
+        border-radius: 0px;
+        padding: 3px 8px;
+        font-size: 10px;
         font-weight: 700;
     }}
     QLabel[chip="true"][state="connected"] {{
@@ -137,8 +159,8 @@ def build_stylesheet() -> str:
         outline: none;
     }}
     QListWidget::item {{
-        padding: 8px 8px;
-        border-radius: 8px;
+        padding: 6px 6px;
+        border-radius: 0px;
         margin: 1px 0;
     }}
     QListWidget::item:selected {{

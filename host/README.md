@@ -28,3 +28,5 @@ The GUI currently supports:
 - One-shot read for selected variable (`Read Once`)
 - One-shot write for selected variable with explicit data type (`Write Once`)
 - Variable monitor add by double-click and explicit remove via `Remove Selected`
+- Dock-based layout: left Sidebar / center waveform / right Inspector
+- Persistent window layout across restarts (dock position and size)

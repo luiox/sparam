@@ -233,6 +233,7 @@ def test_device_manager_receives_periodic_stream_samples() -> None:
         time.sleep(0.01)
 
     manager.stop_monitor()
+    assert not conn.is_receive_running()
     conn.close()
     server.stop()
 
