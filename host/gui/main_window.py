@@ -108,8 +108,8 @@ class MainWindow(QMainWindow):
         root.setObjectName("workspaceShell")
         self.setCentralWidget(root)
         layout = QVBoxLayout(root)
-        layout.setContentsMargins(12, 12, 12, 12)
-        layout.setSpacing(10)
+        layout.setContentsMargins(8, 8, 8, 8)
+        layout.setSpacing(8)
 
         self.toolbar = Toolbar()
         self.sidebar = Sidebar()
@@ -130,7 +130,7 @@ class MainWindow(QMainWindow):
         center_column = QWidget()
         center_layout = QVBoxLayout(center_column)
         center_layout.setContentsMargins(0, 0, 0, 0)
-        center_layout.setSpacing(10)
+        center_layout.setSpacing(8)
 
         self.waveform = WaveformPlot()
         center_layout.addWidget(self.waveform, 1)
@@ -138,8 +138,8 @@ class MainWindow(QMainWindow):
         self.stats_strip = QFrame()
         self.stats_strip.setObjectName("signalStatsStrip")
         cards_layout = QVBoxLayout(self.stats_strip)
-        cards_layout.setContentsMargins(12, 10, 12, 12)
-        cards_layout.setSpacing(8)
+        cards_layout.setContentsMargins(8, 8, 8, 8)
+        cards_layout.setSpacing(6)
 
         stats_title_row = QHBoxLayout()
         stats_title_row.setContentsMargins(0, 0, 0, 0)
@@ -257,8 +257,8 @@ class MainWindow(QMainWindow):
         inspector = QFrame()
         inspector.setObjectName("inspectorPanel")
         inspector_layout = QVBoxLayout(inspector)
-        inspector_layout.setContentsMargins(12, 12, 12, 12)
-        inspector_layout.setSpacing(10)
+        inspector_layout.setContentsMargins(8, 8, 8, 8)
+        inspector_layout.setSpacing(8)
 
         connection_card, self.connection_fields = self._create_summary_card(
             "Connection Overview",
@@ -302,8 +302,8 @@ class MainWindow(QMainWindow):
         card = QFrame()
         card.setObjectName("summaryCard")
         layout = QVBoxLayout(card)
-        layout.setContentsMargins(12, 10, 12, 12)
-        layout.setSpacing(8)
+        layout.setContentsMargins(8, 8, 8, 8)
+        layout.setSpacing(6)
 
         title_label = QLabel(title)
         title_label.setProperty("sectionTitle", True)
