@@ -1,10 +1,11 @@
+import faulthandler
 import os
 import sys
 import traceback
 from datetime import datetime
 from pathlib import Path
 from types import TracebackType
-from typing import Optional
+from typing import Optional, TextIO
 
 from PySide6.QtCore import QtMsgType, qInstallMessageHandler
 from PySide6.QtWidgets import QApplication
@@ -12,9 +13,11 @@ from PySide6.QtWidgets import QApplication
 from .main_window import MainWindow
 from .styles.catppuccin import build_stylesheet
 
+_FAULT_LOG_STREAM: Optional[TextIO] = None
+
 
 def _runtime_log_path() -> Path:
-    return Path.cwd() / "sparam_gui_runtime.log"
+    return Path(__file__).resolve().parents[1] / "sparam_gui_runtime.log"
 
 
 def _append_runtime_log(line: str) -> None:
@@ -23,7 +26,36 @@ def _append_runtime_log(line: str) -> None:
         handle.write(f"[{timestamp}] {line}\n")
 
 
+def _enable_fault_handler() -> None:
+    global _FAULT_LOG_STREAM
+
+    if _FAULT_LOG_STREAM is not None:
+        return
+
+    try:
+        _FAULT_LOG_STREAM = _runtime_log_path().open("a", encoding="utf-8")
+        faulthandler.enable(file=_FAULT_LOG_STREAM, all_threads=True)
+    except OSError:
+        _FAULT_LOG_STREAM = None
+
+
+def _disable_fault_handler() -> None:
+    global _FAULT_LOG_STREAM
+
+    if _FAULT_LOG_STREAM is None:
+        return
+
+    try:
+        faulthandler.disable()
+    finally:
+        _FAULT_LOG_STREAM.close()
+        _FAULT_LOG_STREAM = None
+
+
 def _install_runtime_diagnostics() -> None:
+    _enable_fault_handler()
+    _append_runtime_log(f"GUI start pid={os.getpid()} cwd={Path.cwd()}")
+
     def _excepthook(
         exc_type: type[BaseException],
         exc: BaseException,
@@ -64,7 +96,9 @@ def run_gui() -> None:
     app.setStyleSheet(build_stylesheet())
     window = MainWindow()
     window.show()
-    sys.exit(app.exec())
+    exit_code = app.exec()
+    _disable_fault_handler()
+    sys.exit(exit_code)
 
 
 if __name__ == "__main__":
