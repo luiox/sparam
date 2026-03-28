@@ -5,6 +5,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Any, List, Optional, Tuple, cast
 from unittest import SkipTest
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
@@ -161,7 +162,7 @@ def test_write_once_handles_device_exception_without_crash() -> None:
     _require_gui_stack()
 
     from PySide6.QtCore import QSettings
-    from PySide6.QtWidgets import QApplication
+    from PySide6.QtWidgets import QApplication, QMessageBox
 
     from gui.main_window import MainWindow
     from sparam import Device
@@ -184,7 +185,11 @@ def test_write_once_handles_device_exception_without_crash() -> None:
         window.sidebar.set_rw_value("32")
         window.device = cast(Device, _RaisingDevice())
 
-        window._write_once_variable()
+        def _fail_if_called(*args: Any, **kwargs: Any) -> int:
+            raise AssertionError("QMessageBox.warning should not be called")
+
+        with patch.object(QMessageBox, "warning", side_effect=_fail_if_called):
+            window._write_once_variable()
 
         window.close()
     app.quit()

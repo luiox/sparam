@@ -5,6 +5,7 @@ from typing import Dict, List, Optional, Tuple
 from PySide6.QtCore import QObject, QSettings, Qt, QTimer, Signal
 from PySide6.QtGui import QCloseEvent
 from PySide6.QtWidgets import (
+    QApplication,
     QDockWidget,
     QFileDialog,
     QFrame,
@@ -89,12 +90,15 @@ class MainWindow(QMainWindow):
     SETTINGS_APP = "sparam-gui"
     SETTINGS_GEOMETRY_KEY = "window/geometry"
     SETTINGS_STATE_KEY = "window/state"
-    SETTINGS_STATE_VERSION = 2
+    SETTINGS_STATE_VERSION = 3
 
     def __init__(self, settings: Optional[QSettings] = None) -> None:
         super().__init__()
         self.setWindowTitle("sparam")
         self.resize(1360, 860)
+        # Keep a conservative explicit minimum size so dock minimum hints do not
+        # force the top-level window beyond the available monitor area.
+        self.setMinimumSize(960, 620)
 
         self.parser = ElfParser()
         self.current_symbol_path: Optional[str] = None
@@ -303,6 +307,34 @@ class MainWindow(QMainWindow):
             restored = self.restoreState(state, self.SETTINGS_STATE_VERSION)
         if not restored:
             self._apply_default_dock_layout()
+        self._clamp_to_available_screen()
+
+    def _clamp_to_available_screen(self) -> None:
+        screen = self.screen() or QApplication.primaryScreen()
+        if screen is None:
+            return
+
+        available = screen.availableGeometry()
+        if available.width() <= 0 or available.height() <= 0:
+            return
+
+        max_width = max(640, available.width())
+        max_height = max(480, available.height())
+        clamped_width = min(self.width(), max_width)
+        clamped_height = min(self.height(), max_height)
+        if clamped_width != self.width() or clamped_height != self.height():
+            self.resize(clamped_width, clamped_height)
+
+        max_x = max(available.left(), available.right() - self.width() + 1)
+        max_y = max(available.top(), available.bottom() - self.height() + 1)
+        clamped_x = min(max(self.x(), available.left()), max_x)
+        clamped_y = min(max(self.y(), available.top()), max_y)
+        if clamped_x != self.x() or clamped_y != self.y():
+            self.move(clamped_x, clamped_y)
+
+    def _notify_runtime_warning(self, title: str, detail: str) -> None:
+        self.toolbar.set_status_text(f"{title}: {detail}")
+        self._log(f"{title}: {detail}")
 
     def _save_window_layout(self) -> None:
         self.settings.setValue(self.SETTINGS_GEOMETRY_KEY, self.saveGeometry())
@@ -591,15 +623,19 @@ class MainWindow(QMainWindow):
             value_bytes = self.device.read_value(variable, timeout=1.0)
         except Exception as exc:
             self._resume_stream_after_single_io(was_streaming)
-            self._log(f"READ FAIL {variable.name}: exception ({exc})")
-            QMessageBox.warning(self, "Read Once", f"Read failed: {exc}")
+            self._notify_runtime_warning(
+                "Read Once",
+                f"{variable.name} failed ({exc})",
+            )
             return
         self._resume_stream_after_single_io(was_streaming)
 
         if value_bytes is None:
             error_reason = self.device.last_error or "unknown error"
-            self._log(f"READ FAIL {variable.name}: {error_reason}")
-            QMessageBox.warning(self, "Read Once", "Read failed.")
+            self._notify_runtime_warning(
+                "Read Once",
+                f"{variable.name} failed ({error_reason})",
+            )
             return
 
         try:
@@ -654,15 +690,19 @@ class MainWindow(QMainWindow):
             )
         except Exception as exc:
             self._resume_stream_after_single_io(was_streaming)
-            self._log(f"WRITE FAIL {variable.name}: exception ({exc})")
-            QMessageBox.warning(self, "Write Once", f"Write failed: {exc}")
+            self._notify_runtime_warning(
+                "Write Once",
+                f"{variable.name} failed ({exc})",
+            )
             return
         self._resume_stream_after_single_io(was_streaming)
 
         if not ok:
             error_reason = self.device.last_error or "unknown error"
-            self._log(f"WRITE FAIL {variable.name}: {error_reason}")
-            QMessageBox.warning(self, "Write Once", "Write failed.")
+            self._notify_runtime_warning(
+                "Write Once",
+                f"{variable.name} failed ({error_reason})",
+            )
             return
 
         self._log(f"WRITE {variable.name} <= {raw_text} ({dtype.name})")
