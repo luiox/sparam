@@ -2,7 +2,7 @@ import csv
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
-from PySide6.QtCore import QObject, Qt, Signal
+from PySide6.QtCore import QObject, Qt, QTimer, Signal
 from PySide6.QtGui import QCloseEvent
 from PySide6.QtWidgets import (
     QFileDialog,
@@ -17,12 +17,14 @@ from PySide6.QtWidgets import (
 )
 
 from sparam import (
+    DataType,
     Device,
     DeviceManager,
     ElfParser,
     MonitorStore,
     SamplePoint,
     SerialConnection,
+    Variable,
 )
 
 from .styles.catppuccin import SERIES_COLORS
@@ -41,6 +43,16 @@ class DeviceBridge(QObject):
 
 
 class MainWindow(QMainWindow):
+    DTYPE_OPTIONS = {
+        "uint8": DataType.UINT8,
+        "int8": DataType.INT8,
+        "uint16": DataType.UINT16,
+        "int16": DataType.INT16,
+        "uint32": DataType.UINT32,
+        "int32": DataType.INT32,
+        "float": DataType.FLOAT,
+    }
+
     RATE_OPTIONS = {
         "1 ms": 1,
         "5 ms": 2,
@@ -76,6 +88,9 @@ class MainWindow(QMainWindow):
         self.monitor_paused = False
         self.connection_fields: Dict[str, QLabel] = {}
         self.monitor_fields: Dict[str, QLabel] = {}
+        self.restart_monitor_timer = QTimer(self)
+        self.restart_monitor_timer.setSingleShot(True)
+        self.restart_monitor_timer.timeout.connect(self._restart_monitoring_if_needed)
 
         self._build_ui()
         self._refresh_ports()
@@ -93,11 +108,14 @@ class MainWindow(QMainWindow):
         self.sidebar.connect_requested.connect(self._toggle_connection)
         self.sidebar.load_symbols_requested.connect(self._browse_symbols)
         self.sidebar.pause_requested.connect(self._toggle_pause)
+        self.sidebar.read_once_requested.connect(self._read_once_variable)
+        self.sidebar.write_once_requested.connect(self._write_once_variable)
         self.sidebar.export_png_requested.connect(self._export_png)
         self.sidebar.export_csv_requested.connect(self._export_csv)
         self.sidebar.window_changed.connect(self._set_time_window)
         self.sidebar.rate_changed.connect(self._handle_rate_change)
-        self.sidebar.variable_activated.connect(self._toggle_variable_monitor)
+        self.sidebar.variable_activated.connect(self._add_variable_monitor)
+        self.sidebar.variable_remove_requested.connect(self._remove_variable_monitor)
         self.sidebar.selection_changed.connect(self._preview_variable)
 
         workspace = QWidget()
@@ -283,9 +301,10 @@ class MainWindow(QMainWindow):
         self.sidebar.set_connected(True)
         self._log(f"Connected to {port} (baud={self.sidebar.current_baudrate()}).")
         self._refresh_summary_cards()
-        self._restart_monitoring_if_needed()
+        self._schedule_monitor_restart()
 
     def _disconnect_device(self) -> None:
+        self.restart_monitor_timer.stop()
         if self.device_manager:
             self.device_manager.stop_monitor()
         if self.conn and self.conn.is_open():
@@ -308,29 +327,37 @@ class MainWindow(QMainWindow):
             f"{variable.name}  0x{variable.address:08X}  {variable.var_type}"
         )
 
-    def _toggle_variable_monitor(self, name: str) -> None:
+    def _add_variable_monitor(self, name: str) -> None:
         variable = self.parser.get_variable(name)
-        if not variable:
+        if not variable or name in self.monitored_names:
             return
 
-        if name in self.monitored_names:
-            self.monitored_names = [
-                item for item in self.monitored_names if item != name
-            ]
-            self.sidebar.set_monitored(name, False)
-            self.waveform.remove_variable(name)
-            self._remove_card(name)
-            self._log(f"Removed {name} from monitor.")
-        else:
-            self.monitored_names.append(name)
-            color = self._series_color_for(name)
-            self.sidebar.set_monitored(name, True)
-            self.waveform.add_variable(name, color)
-            self._ensure_card(name, color)
-            self._log(f"Added {name} to monitor.")
-
+        self.monitored_names.append(name)
+        color = self._series_color_for(name)
+        self.sidebar.set_monitored(name, True)
+        self.waveform.add_variable(name, color)
+        self._ensure_card(name, color)
+        self._log(f"Added {name} to monitor.")
         self._refresh_summary_cards()
-        self._restart_monitoring_if_needed()
+        self._schedule_monitor_restart()
+
+    def _remove_variable_monitor(self, name: str) -> None:
+        if name not in self.monitored_names:
+            return
+
+        self.monitored_names = [item for item in self.monitored_names if item != name]
+        self.sidebar.set_monitored(name, False)
+        self.waveform.remove_variable(name)
+        self._remove_card(name)
+        self._log(f"Removed {name} from monitor.")
+        self._refresh_summary_cards()
+        self._schedule_monitor_restart()
+
+    def _toggle_variable_monitor(self, name: str) -> None:
+        if name in self.monitored_names:
+            self._remove_variable_monitor(name)
+        else:
+            self._add_variable_monitor(name)
 
     def _series_color_for(self, name: str) -> str:
         if name in self.monitored_names:
@@ -367,7 +394,114 @@ class MainWindow(QMainWindow):
 
     def _handle_rate_change(self, _label: str) -> None:
         self._refresh_summary_cards()
-        self._restart_monitoring_if_needed()
+        self._schedule_monitor_restart()
+
+    def _schedule_monitor_restart(self) -> None:
+        # Debounce rapid UI actions (e.g., fast variable double-clicks) to avoid
+        # repeated stop/start monitor churn on the transport layer.
+        self.restart_monitor_timer.start(80)
+
+    def _current_dtype(self) -> DataType:
+        return self.DTYPE_OPTIONS.get(
+            self.sidebar.current_dtype_label(),
+            DataType.FLOAT,
+        )
+
+    def _selected_variable(self) -> Optional[Variable]:
+        name = self.sidebar.current_variable_name()
+        if not name:
+            return None
+        return self.parser.get_variable(name)
+
+    def _pause_stream_for_single_io(self) -> bool:
+        was_streaming = bool(self.device_manager and self.monitor_active)
+        if was_streaming and self.device_manager:
+            self.device_manager.stop_monitor()
+            self.monitor_active = False
+            self._refresh_summary_cards()
+        return was_streaming
+
+    def _resume_stream_after_single_io(self, was_streaming: bool) -> None:
+        if was_streaming:
+            self._schedule_monitor_restart()
+
+    def _read_once_variable(self) -> None:
+        variable = self._selected_variable()
+        if not variable:
+            QMessageBox.warning(self, "Read Once", "Please select a variable first.")
+            return
+        if not self.device:
+            QMessageBox.warning(self, "Read Once", "No active device connection.")
+            return
+
+        was_streaming = self._pause_stream_for_single_io()
+        value_bytes = self.device.read_value(variable, timeout=1.0)
+        self._resume_stream_after_single_io(was_streaming)
+
+        if value_bytes is None:
+            error_reason = self.device.last_error or "unknown error"
+            self._log(f"READ FAIL {variable.name}: {error_reason}")
+            QMessageBox.warning(self, "Read Once", "Read failed.")
+            return
+
+        try:
+            if variable.dtype_code:
+                dtype = DataType(variable.dtype_code)
+            else:
+                dtype = self._current_dtype()
+            value = Device.bytes_to_value(value_bytes[: dtype.size], dtype)
+            if dtype == DataType.FLOAT:
+                shown = f"{float(value):.6g}"
+            else:
+                shown = str(int(value))
+        except Exception:
+            shown = value_bytes.hex()
+
+        self.sidebar.set_rw_value(shown)
+        self._log(f"READ {variable.name} = {shown}")
+
+    def _write_once_variable(self) -> None:
+        variable = self._selected_variable()
+        if not variable:
+            QMessageBox.warning(self, "Write Once", "Please select a variable first.")
+            return
+        if not self.device:
+            QMessageBox.warning(self, "Write Once", "No active device connection.")
+            return
+
+        raw_text = self.sidebar.current_write_value()
+        if not raw_text:
+            QMessageBox.warning(self, "Write Once", "Please input a value.")
+            return
+
+        dtype = self._current_dtype()
+        try:
+            if dtype == DataType.FLOAT:
+                typed_value = float(raw_text)
+            else:
+                typed_value = int(raw_text, 0)
+            value_bytes = Device.value_to_bytes(typed_value, dtype)
+        except Exception as exc:
+            self._log(f"WRITE FAIL {variable.name}: invalid value {raw_text} ({exc})")
+            QMessageBox.warning(self, "Write Once", f"Invalid value: {exc}")
+            return
+
+        was_streaming = self._pause_stream_for_single_io()
+        ok = self.device.write_single(
+            variable,
+            value_bytes,
+            timeout=1.0,
+            dtype_override=dtype,
+        )
+        self._resume_stream_after_single_io(was_streaming)
+
+        if not ok:
+            error_reason = self.device.last_error or "unknown error"
+            self._log(f"WRITE FAIL {variable.name}: {error_reason}")
+            QMessageBox.warning(self, "Write Once", "Write failed.")
+            return
+
+        self._log(f"WRITE {variable.name} <= {raw_text} ({dtype.name})")
 
     def _restart_monitoring_if_needed(self) -> None:
         if not self.device_manager or not self.monitored_names:
@@ -444,6 +578,7 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "Export CSV", f"Failed to export CSV: {exc}")
 
     def closeEvent(self, event: QCloseEvent) -> None:  # noqa: N802
+        self.restart_monitor_timer.stop()
         if self.device_manager:
             self.device_manager.stop_monitor()
         if self.conn and self.conn.is_open():

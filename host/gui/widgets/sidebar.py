@@ -1,7 +1,6 @@
 from typing import Iterable, Optional, cast
 
-from PySide6.QtCore import Signal
-from PySide6.QtGui import QFont
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QComboBox,
     QFrame,
@@ -24,11 +23,14 @@ class Sidebar(QFrame):
     connect_requested = Signal()
     load_symbols_requested = Signal()
     pause_requested = Signal()
+    read_once_requested = Signal()
+    write_once_requested = Signal()
     export_png_requested = Signal()
     export_csv_requested = Signal()
     window_changed = Signal(str)
     rate_changed = Signal(str)
     variable_activated = Signal(str)
+    variable_remove_requested = Signal(str)
     selection_changed = Signal(str)
 
     def __init__(self) -> None:
@@ -42,6 +44,7 @@ class Sidebar(QFrame):
 
         layout.addWidget(self._build_connection_section())
         layout.addWidget(self._build_monitor_section())
+        layout.addWidget(self._build_io_section())
         layout.addWidget(self._build_export_section())
         layout.addWidget(self._build_variable_section(), 1)
 
@@ -114,25 +117,54 @@ class Sidebar(QFrame):
         body.addWidget(self.export_csv_btn)
         return section
 
+    def _build_io_section(self) -> QFrame:
+        section = self._section_shell("Single Read/Write")
+        body = self._section_body(section)
+
+        self.dtype_combo = QComboBox()
+        self.dtype_combo.addItems(
+            ["float", "uint8", "int8", "uint16", "int16", "uint32", "int32"]
+        )
+        self.value_edit = QLineEdit()
+        self.value_edit.setPlaceholderText("Value for write")
+
+        self.read_once_btn = QPushButton("Read Once")
+        self.write_once_btn = QPushButton("Write Once")
+
+        self.read_once_btn.clicked.connect(self.read_once_requested.emit)
+        self.write_once_btn.clicked.connect(self.write_once_requested.emit)
+
+        row = QHBoxLayout()
+        row.setSpacing(8)
+        row.addWidget(self.read_once_btn, 1)
+        row.addWidget(self.write_once_btn, 1)
+
+        body.addWidget(self._field("Type", self.dtype_combo))
+        body.addWidget(self._field("Value", self.value_edit))
+        body.addLayout(row)
+        return section
+
     def _build_variable_section(self) -> QFrame:
         section = self._section_shell("Variables")
         body = self._section_body(section)
 
-        helper = QLabel("Double-click to pin a signal into the live canvas.")
+        helper = QLabel("Double-click adds monitor; remove with button below.")
         helper.setProperty("muted", True)
         self.filter_edit = QLineEdit()
         self.filter_edit.setPlaceholderText("Search variables")
         self.filter_edit.textChanged.connect(self._apply_filter)
 
         self.list_widget = QListWidget()
-        self.list_widget.itemDoubleClicked.connect(
-            lambda item: self.variable_activated.emit(item.data(1) or item.text())
-        )
+        self.list_widget.itemDoubleClicked.connect(self._on_item_double_clicked)
         self.list_widget.currentItemChanged.connect(self._on_current_changed)
+
+        self.remove_var_btn = QPushButton("Remove Selected")
+        self.remove_var_btn.clicked.connect(self._emit_remove_selected)
 
         body.addWidget(helper)
         body.addWidget(self.filter_edit)
         body.addWidget(self.list_widget, 1)
+        body.addWidget(self.remove_var_btn)
         return section
 
     def _section_shell(self, title: str) -> QFrame:
@@ -178,18 +210,17 @@ class Sidebar(QFrame):
         self.list_widget.clear()
         for variable in sorted(variables, key=lambda item: item.name):
             item = QListWidgetItem(variable.name)
-            item.setData(1, variable.name)
+            item.setData(Qt.ItemDataRole.UserRole, variable.name)
+            item.setData(Qt.ItemDataRole.UserRole + 1, False)
             self.list_widget.addItem(item)
 
     def set_monitored(self, name: str, monitored: bool) -> None:
         for index in range(self.list_widget.count()):
             item = self.list_widget.item(index)
-            if item.data(1) == name:
-                item.setText(name)
-                item.setData(1, name)
-                font = QFont(item.font())
-                font.setBold(monitored)
-                item.setFont(font)
+            base_name = item.data(Qt.ItemDataRole.UserRole) or item.text()
+            if base_name == name:
+                item.setData(Qt.ItemDataRole.UserRole + 1, monitored)
+                item.setText(f"[M] {name}" if monitored else name)
                 break
 
     def set_ports(self, ports: Iterable[str]) -> None:
@@ -213,6 +244,21 @@ class Sidebar(QFrame):
     def current_rate_label(self) -> str:
         return self.rate_combo.currentText()
 
+    def current_variable_name(self) -> str:
+        item = self.list_widget.currentItem()
+        if item is None:
+            return ""
+        return (item.data(Qt.ItemDataRole.UserRole) or item.text()).strip()
+
+    def current_dtype_label(self) -> str:
+        return self.dtype_combo.currentText().strip()
+
+    def current_write_value(self) -> str:
+        return self.value_edit.text().strip()
+
+    def set_rw_value(self, value: str) -> None:
+        self.value_edit.setText(value)
+
     def set_connected(self, connected: bool) -> None:
         self.connect_btn.setText("Disconnect" if connected else "Connect")
 
@@ -223,8 +269,18 @@ class Sidebar(QFrame):
         prefix = text.strip().lower()
         for index in range(self.list_widget.count()):
             item = self.list_widget.item(index)
-            name = item.data(1) or item.text()
+            name = item.data(Qt.ItemDataRole.UserRole) or item.text()
             item.setHidden(bool(prefix) and prefix not in name.lower())
+
+    def _on_item_double_clicked(self, item: QListWidgetItem) -> None:
+        name = item.data(Qt.ItemDataRole.UserRole) or item.text()
+        if name:
+            self.variable_activated.emit(name)
+
+    def _emit_remove_selected(self) -> None:
+        name = self.current_variable_name()
+        if name:
+            self.variable_remove_requested.emit(name)
 
     def _on_current_changed(
         self,
@@ -232,4 +288,6 @@ class Sidebar(QFrame):
         _previous: Optional[QListWidgetItem],
     ) -> None:
         if current:
-            self.selection_changed.emit(current.data(1) or current.text())
+            self.selection_changed.emit(
+                current.data(Qt.ItemDataRole.UserRole) or current.text()
+            )

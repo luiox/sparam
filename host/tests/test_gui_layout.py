@@ -26,6 +26,9 @@ def test_main_window_exposes_signal_lab_layout() -> None:
     assert (
         window.findChild(type(window.centralWidget()), "signalStatsStrip") is not None
     )
+    assert hasattr(window.sidebar, "read_once_btn")
+    assert hasattr(window.sidebar, "write_once_btn")
+    assert hasattr(window.sidebar, "remove_var_btn")
 
     window.close()
     app.quit()

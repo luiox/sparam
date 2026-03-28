@@ -25,5 +25,6 @@ The GUI currently supports:
 - Offline symbol parsing (load `.elf` / `.out` / `.map` without serial device)
 - Load `.elf` / `.out` / `.map` symbol files
 - Variable list and prefix filter
-- Read selected variable value
-- Write selected variable value with explicit data type
+- One-shot read for selected variable (`Read Once`)
+- One-shot write for selected variable with explicit data type (`Write Once`)
+- Variable monitor add by double-click and explicit remove via `Remove Selected`
