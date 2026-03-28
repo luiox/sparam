@@ -43,7 +43,12 @@ sparam/
 
 ## 协议
 
-详见 [doc/总设计文档.md](doc/总设计文档.md)
+设计文档已拆分，建议从总索引开始：
+
+- [doc/总设计文档.md](doc/总设计文档.md)
+- [doc/协议设计文档.md](doc/协议设计文档.md)
+- [doc/sparam-gui设计文档.md](doc/sparam-gui设计文档.md)
+- [doc/sparam-cli设计文档.md](doc/sparam-cli设计文档.md)
 
 ## 许可证
 
