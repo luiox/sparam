@@ -27,6 +27,20 @@ class _FakeDevice:
         return True
 
 
+class _RaisingDevice:
+    def __init__(self) -> None:
+        self.last_error = ""
+
+    def write_single(
+        self,
+        variable: Any,
+        value_bytes: bytes,
+        timeout: float = 1.0,
+        dtype_override: Optional[Any] = None,
+    ) -> bool:
+        raise RuntimeError("mock transport write failure")
+
+
 def _require_gui_stack() -> None:
     if importlib.util.find_spec("PySide6") is None:
         raise SkipTest("PySide6 is not installed")
@@ -107,6 +121,70 @@ def test_write_once_uses_integer_parsing_for_uint32() -> None:
         _, value_bytes, _, dtype = fake_device.write_calls[0]
         assert value_bytes == struct.pack("<I", 42)
         assert dtype == DataType.UINT32
+
+        window.close()
+    app.quit()
+
+
+def test_variable_selection_auto_syncs_rw_dtype() -> None:
+    _require_gui_stack()
+
+    from PySide6.QtCore import QSettings
+    from PySide6.QtWidgets import QApplication
+
+    from gui.main_window import MainWindow
+    from sparam.elf_parser import Variable
+
+    app = QApplication.instance() or QApplication([])
+    with TemporaryDirectory() as temp_dir:
+        settings = QSettings(
+            str(Path(temp_dir) / "dtype-sync.ini"),
+            QSettings.Format.IniFormat,
+        )
+        settings.clear()
+        window = MainWindow(settings=settings)
+
+        variable = Variable("torque_target", 0x20000010, 2, "int16_t")
+        window.parser.variables = {variable.name: variable}
+        window.sidebar.set_variables([variable])
+        window.sidebar.dtype_combo.setCurrentText("float")
+
+        window._preview_variable(variable.name)
+
+        assert window.sidebar.current_dtype_label() == "int16"
+
+        window.close()
+    app.quit()
+
+
+def test_write_once_handles_device_exception_without_crash() -> None:
+    _require_gui_stack()
+
+    from PySide6.QtCore import QSettings
+    from PySide6.QtWidgets import QApplication
+
+    from gui.main_window import MainWindow
+    from sparam import Device
+    from sparam.elf_parser import Variable
+
+    app = QApplication.instance() or QApplication([])
+    with TemporaryDirectory() as temp_dir:
+        settings = QSettings(
+            str(Path(temp_dir) / "write-exception.ini"),
+            QSettings.Format.IniFormat,
+        )
+        settings.clear()
+        window = MainWindow(settings=settings)
+
+        variable = Variable("motor_speed", 0x20000000, 4, "uint32_t")
+        window.parser.variables = {variable.name: variable}
+        window.sidebar.set_variables([variable])
+        window.sidebar.list_widget.setCurrentRow(0)
+        window.sidebar.dtype_combo.setCurrentText("uint32")
+        window.sidebar.set_rw_value("32")
+        window.device = cast(Device, _RaisingDevice())
+
+        window._write_once_variable()
 
         window.close()
     app.quit()

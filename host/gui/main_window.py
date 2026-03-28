@@ -53,6 +53,21 @@ class MainWindow(QMainWindow):
         "int32": DataType.INT32,
         "float": DataType.FLOAT,
     }
+    DTYPE_TYPE_HINTS = {
+        "uint8_t": "uint8",
+        "unsigned char": "uint8",
+        "int8_t": "int8",
+        "signed char": "int8",
+        "uint16_t": "uint16",
+        "unsigned short": "uint16",
+        "int16_t": "int16",
+        "short": "int16",
+        "uint32_t": "uint32",
+        "unsigned int": "uint32",
+        "int32_t": "int32",
+        "int": "int32",
+        "float": "float",
+    }
 
     RATE_OPTIONS = {
         "1 ms": 1,
@@ -426,9 +441,43 @@ class MainWindow(QMainWindow):
         variable = self.parser.get_variable(name)
         if not variable:
             return
+        self._sync_dtype_with_variable(variable)
         self.toolbar.set_status_text(
             f"{variable.name}  0x{variable.address:08X}  {variable.var_type}"
         )
+
+    def _sync_dtype_with_variable(self, variable: Variable) -> None:
+        label = self._dtype_label_for_variable(variable)
+        if label:
+            self.sidebar.set_dtype_label(label)
+
+    def _dtype_label_for_variable(self, variable: Variable) -> Optional[str]:
+        normalized = variable.var_type.strip().lower()
+        exact = self.DTYPE_TYPE_HINTS.get(normalized)
+        if exact:
+            return exact
+
+        for token, label in (
+            ("uint8", "uint8"),
+            ("int8", "int8"),
+            ("uint16", "uint16"),
+            ("int16", "int16"),
+            ("uint32", "uint32"),
+            ("int32", "int32"),
+            ("float", "float"),
+        ):
+            if token in normalized:
+                return label
+
+        try:
+            dtype = DataType(variable.dtype_code)
+        except Exception:
+            return None
+
+        for label, option in self.DTYPE_OPTIONS.items():
+            if option == dtype:
+                return label
+        return None
 
     def _add_variable_monitor(self, name: str) -> None:
         variable = self.parser.get_variable(name)
@@ -538,7 +587,13 @@ class MainWindow(QMainWindow):
             return
 
         was_streaming = self._pause_stream_for_single_io()
-        value_bytes = self.device.read_value(variable, timeout=1.0)
+        try:
+            value_bytes = self.device.read_value(variable, timeout=1.0)
+        except Exception as exc:
+            self._resume_stream_after_single_io(was_streaming)
+            self._log(f"READ FAIL {variable.name}: exception ({exc})")
+            QMessageBox.warning(self, "Read Once", f"Read failed: {exc}")
+            return
         self._resume_stream_after_single_io(was_streaming)
 
         if value_bytes is None:
@@ -590,12 +645,18 @@ class MainWindow(QMainWindow):
             return
 
         was_streaming = self._pause_stream_for_single_io()
-        ok = self.device.write_single(
-            variable,
-            value_bytes,
-            timeout=1.0,
-            dtype_override=dtype,
-        )
+        try:
+            ok = self.device.write_single(
+                variable,
+                value_bytes,
+                timeout=1.0,
+                dtype_override=dtype,
+            )
+        except Exception as exc:
+            self._resume_stream_after_single_io(was_streaming)
+            self._log(f"WRITE FAIL {variable.name}: exception ({exc})")
+            QMessageBox.warning(self, "Write Once", f"Write failed: {exc}")
+            return
         self._resume_stream_after_single_io(was_streaming)
 
         if not ok:

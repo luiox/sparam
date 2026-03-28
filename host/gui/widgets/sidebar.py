@@ -338,6 +338,11 @@ class Sidebar(QFrame):
     def current_dtype_label(self) -> str:
         return self.dtype_combo.currentText().strip()
 
+    def set_dtype_label(self, label: str) -> None:
+        index = self.dtype_combo.findText(label)
+        if index >= 0:
+            self.dtype_combo.setCurrentIndex(index)
+
     def current_write_value(self) -> str:
         return self.value_edit.text().strip()
 
