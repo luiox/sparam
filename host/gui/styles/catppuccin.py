@@ -28,7 +28,7 @@ def build_stylesheet() -> str:
         background: {PAGE_BG};
         color: {TEXT};
         font-family: Monospace;
-        font-size: 11px;
+        font-size: 9pt;
     }}
     QMainWindow {{
         background: {PAGE_BG};

@@ -83,13 +83,36 @@ host/gui/
 - 恢复时机：窗口初始化阶段
 - 保存时机：`closeEvent`
 
+### 5.4 左侧三 Dock 精细化拆分
+
+- 左侧区域拆分为三段独立 Dock：
+	- Control（Transport / Monitor / Capture）
+	- Single Read/Write
+	- Variables
+- 默认纵向分布，默认宽度 260 px，可拖拽调整。
+- 各 Dock 设置稳定 objectName，保障布局持久化可恢复。
+
+### 5.5 紧凑密度与折叠交互
+
+- 全局样式密度下调（间距、控件占高、标题尺寸）。
+- Sidebar 分区支持单独折叠。
+- 支持一键收起/展开全部分区。
+
+### 5.6 稳定性与诊断收敛
+
+- 变量选中时自动同步 Read/Write 数据类型。
+- Read Once / Write Once 异常路径加兜底，避免界面直接退出。
+- 布局恢复加入版本门控与可见区域夹紧，降低几何异常风险。
+- 运行时诊断日志落盘到 `host/sparam_gui_runtime.log`，记录 Qt 消息与未处理异常。
+- 串口接收线程生命周期与监测流程绑定，降低 Windows 下 read/close 并发崩溃风险。
+
 ## 6. 风险与验证点
 
 风险点：
 
 - Dock 拖拽与高频交互下的 UI 事件竞态
 - 跨平台窗口管理差异
-- 布局恢复失败导致窗口不可见
+- 串口读写线程并发导致的底层驱动不稳定
 
 验证点：
 
@@ -97,6 +120,7 @@ host/gui/
 - Read Once / Write Once 稳定
 - Dock 可停靠、可拖出、可拉伸
 - 重启后布局恢复一致
+- 写入失败场景不触发进程异常退出
 
 当前回归结果：
 
@@ -107,3 +131,4 @@ host/gui/
 - 总入口：`总设计文档.md`
 - 协议设计：`协议设计文档.md`
 - CLI 设计：`sparam-cli设计文档.md`
+- 任务归档：`plans/2026-03-28-issue3-m3-dock-archive.md`

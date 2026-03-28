@@ -23,6 +23,37 @@ class SerialConnection:
         self._rx_buffer = bytearray()
         self.last_error = ""
 
+    def is_receive_running(self) -> bool:
+        return bool(self._rx_thread and self._rx_thread.is_alive())
+
+    def _cancel_pending_read(self) -> None:
+        serial_port = self._serial
+        if serial_port is None:
+            return
+
+        cancel_read = getattr(serial_port, "cancel_read", None)
+        if not callable(cancel_read):
+            return
+
+        try:
+            cancel_read()
+        except (OSError, serial.SerialException):
+            return
+
+    def stop_receive(self) -> None:
+        self._stop_event.set()
+
+        thread = self._rx_thread
+        if thread and thread.is_alive():
+            self._cancel_pending_read()
+            thread.join(timeout=max(0.2, self.timeout + 0.2))
+            if thread.is_alive():
+                self._cancel_pending_read()
+                thread.join(timeout=0.2)
+
+        self._rx_thread = None
+        self._on_frame = None
+
     @staticmethod
     def list_ports() -> List[str]:
         ports = serial.tools.list_ports.comports()
@@ -43,10 +74,7 @@ class SerialConnection:
             return False
 
     def close(self) -> None:
-        self._stop_event.set()
-        if self._rx_thread:
-            self._rx_thread.join(timeout=1.0)
-            self._rx_thread = None
+        self.stop_receive()
 
         if self._serial and self._serial.is_open:
             self._serial.close()
@@ -126,6 +154,8 @@ class SerialConnection:
 
     def start_receive(self, on_frame: Callable[[Frame], None]) -> None:
         self._on_frame = on_frame
+        if self.is_receive_running():
+            return
         self._stop_event.clear()
         self._rx_thread = Thread(target=self._receive_loop, daemon=True)
         self._rx_thread.start()

@@ -64,3 +64,4 @@ dkms.conf
 /host/.pytest_cache/
 /host/.venv/
 /.xmake
+*.log
