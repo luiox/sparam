@@ -2,6 +2,8 @@ import re
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
+from .protocol import C_TYPE_TO_DATA_TYPE, DataType
+
 
 @dataclass
 class Variable:
@@ -12,22 +14,8 @@ class Variable:
 
     @property
     def dtype_code(self) -> int:
-        type_map = {
-            "uint8_t": 0x01,
-            "int8_t": 0x02,
-            "uint16_t": 0x03,
-            "int16_t": 0x04,
-            "uint32_t": 0x05,
-            "int32_t": 0x06,
-            "float": 0x07,
-            "unsigned char": 0x01,
-            "signed char": 0x02,
-            "unsigned short": 0x03,
-            "short": 0x04,
-            "unsigned int": 0x05,
-            "int": 0x06,
-        }
-        return type_map.get(self.var_type, 0x05)
+        normalized = self.var_type.strip().lower()
+        return int(C_TYPE_TO_DATA_TYPE.get(normalized, DataType.UINT32))
 
 
 class ElfParser:
