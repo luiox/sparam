@@ -30,6 +30,7 @@ from sparam import (
     Variable,
 )
 
+from .controllers import ConnectionController, IOController
 from .styles.catppuccin import SERIES_COLORS
 from .widgets.log_panel import LogPanel
 from .widgets.sidebar import Sidebar
@@ -117,6 +118,8 @@ class MainWindow(QMainWindow):
         self.device: Optional[Device] = None
         self.device_manager: Optional[DeviceManager] = None
         self.bridge: Optional[DeviceBridge] = None
+        self.connection_controller = ConnectionController()
+        self.io_controller = IOController()
         self.store = MonitorStore(max_points=1200)
         self.monitor_state = MonitorState()
         self.cards: Dict[str, ValueCard] = {}
@@ -447,31 +450,27 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "Connection", "Please select a serial port.")
             return
 
-        conn = SerialConnection(
+        result = self.connection_controller.connect(
             port,
             self.sidebar.current_baudrate(),
+            self.sidebar.current_device_id(),
+            self.parser,
             timeout=1.0,
         )
-        if not conn.open():
-            reason = conn.last_error or "port busy or unavailable"
-            self._log(f"CONNECT FAIL: unable to open {port} ({reason})")
-            QMessageBox.critical(self, "Connection", f"Failed to open {port}.")
-            return
-
-        device = Device(conn, self.sidebar.current_device_id(), elf_parser=self.parser)
-        if not device.ping(timeout=1.0):
-            conn.close()
-            reason = device.last_error or "ping timeout"
-            self._log(f"CONNECT FAIL: {reason}")
+        if not result.ok:
+            self._log(f"CONNECT FAIL: {result.error}")
             QMessageBox.warning(
                 self, "Connection", "Ping failed. Check device id and cable."
             )
             return
 
-        self.conn = conn
-        self.device = device
-        self.device_manager = DeviceManager(device)
+        self.conn = result.conn
+        self.device = result.device
+        self.device_manager = result.device_manager
         self.bridge = DeviceBridge()
+        if self.device_manager is None:
+            self._log("CONNECT FAIL: failed to create device manager")
+            return
         self.device_manager.add_callback(self.bridge.emit_sample)
         self.bridge.sample_received.connect(self._on_sample_received)
         self.toolbar.set_connected(True)
@@ -482,10 +481,7 @@ class MainWindow(QMainWindow):
 
     def _disconnect_device(self) -> None:
         self.restart_monitor_timer.stop()
-        if self.device_manager:
-            self.device_manager.stop_monitor()
-        if self.conn and self.conn.is_open():
-            self.conn.close()
+        self.connection_controller.disconnect(self.conn, self.device_manager)
         self.conn = None
         self.device = None
         self.device_manager = None
@@ -636,40 +632,20 @@ class MainWindow(QMainWindow):
             return
 
         was_streaming = self._pause_stream_for_single_io()
-        try:
-            value_bytes = self.device.read_value(variable, timeout=1.0)
-        except Exception as exc:
-            self._resume_stream_after_single_io(was_streaming)
-            self._notify_runtime_warning(
-                "Read Once",
-                f"{variable.name} failed ({exc})",
-            )
-            return
+        result = self.io_controller.read_once(
+            self.device,
+            variable,
+            self._current_dtype(),
+            timeout=1.0,
+        )
         self._resume_stream_after_single_io(was_streaming)
 
-        if value_bytes is None:
-            error_reason = self.device.last_error or "unknown error"
-            self._notify_runtime_warning(
-                "Read Once",
-                f"{variable.name} failed ({error_reason})",
-            )
+        if not result.ok:
+            self._notify_runtime_warning("Read Once", result.error)
             return
 
-        try:
-            if variable.dtype_code:
-                dtype = DataType(variable.dtype_code)
-            else:
-                dtype = self._current_dtype()
-            value = Device.bytes_to_value(value_bytes[: dtype.size], dtype)
-            if dtype == DataType.FLOAT:
-                shown = f"{float(value):.6g}"
-            else:
-                shown = str(int(value))
-        except Exception:
-            shown = value_bytes.hex()
-
-        self.sidebar.set_rw_value(shown)
-        self._log(f"READ {variable.name} = {shown}")
+        self.sidebar.set_rw_value(result.value_text)
+        self._log(f"READ {variable.name} = {result.value_text}")
 
     def _write_once_variable(self) -> None:
         variable = self._selected_variable()
@@ -686,40 +662,22 @@ class MainWindow(QMainWindow):
             return
 
         dtype = self._current_dtype()
-        try:
-            if dtype == DataType.FLOAT:
-                typed_value = float(raw_text)
-            else:
-                typed_value = int(raw_text, 0)
-            value_bytes = Device.value_to_bytes(typed_value, dtype)
-        except Exception as exc:
-            self._log(f"WRITE FAIL {variable.name}: invalid value {raw_text} ({exc})")
-            QMessageBox.warning(self, "Write Once", f"Invalid value: {exc}")
-            return
-
         was_streaming = self._pause_stream_for_single_io()
-        try:
-            ok = self.device.write_single(
-                variable,
-                value_bytes,
-                timeout=1.0,
-                dtype_override=dtype,
-            )
-        except Exception as exc:
-            self._resume_stream_after_single_io(was_streaming)
-            self._notify_runtime_warning(
-                "Write Once",
-                f"{variable.name} failed ({exc})",
-            )
-            return
+        result = self.io_controller.write_once(
+            self.device,
+            variable,
+            raw_text,
+            dtype,
+            timeout=1.0,
+        )
         self._resume_stream_after_single_io(was_streaming)
 
-        if not ok:
-            error_reason = self.device.last_error or "unknown error"
-            self._notify_runtime_warning(
-                "Write Once",
-                f"{variable.name} failed ({error_reason})",
-            )
+        if not result.ok:
+            if result.error.startswith("Invalid value:"):
+                self._log(f"WRITE FAIL {variable.name}: {result.error}")
+                QMessageBox.warning(self, "Write Once", result.error)
+                return
+            self._notify_runtime_warning("Write Once", result.error)
             return
 
         self._log(f"WRITE {variable.name} <= {raw_text} ({dtype.name})")
