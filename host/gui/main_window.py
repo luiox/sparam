@@ -468,9 +468,6 @@ class MainWindow(QMainWindow):
         self.device = result.device
         self.device_manager = result.device_manager
         self.bridge = DeviceBridge()
-        if self.device_manager is None:
-            self._log("CONNECT FAIL: failed to create device manager")
-            return
         self.device_manager.add_callback(self.bridge.emit_sample)
         self.bridge.sample_received.connect(self._on_sample_received)
         self.toolbar.set_connected(True)

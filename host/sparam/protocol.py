@@ -1,7 +1,7 @@
 import struct
 from dataclasses import dataclass
 from enum import IntEnum
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Set, Tuple
 
 import crcmod.predefined
 
@@ -130,10 +130,10 @@ READ_RATE_TO_COMMAND: Dict[int, CommandType] = {
     7: CommandType.READ_200MS,
     8: CommandType.READ_500MS,
 }
-READ_COMMANDS: Tuple[CommandType, ...] = tuple(READ_RATE_TO_COMMAND.values())
-STREAM_READ_COMMANDS: Tuple[CommandType, ...] = tuple(
+READ_COMMANDS: Set[CommandType] = set(READ_RATE_TO_COMMAND.values())
+STREAM_READ_COMMANDS: Set[CommandType] = {
     command for rate, command in READ_RATE_TO_COMMAND.items() if rate > 0
-)
+}
 MIN_MONITOR_RATE = min(rate for rate in SAMPLE_RATES if rate > 0)
 MAX_MONITOR_RATE = max(rate for rate in SAMPLE_RATES if rate > 0)
 SAMPLE_RATE_HELP_TEXT = ", ".join(
@@ -151,11 +151,11 @@ def read_command_for_rate(rate: int) -> CommandType:
 
 
 def is_read_command(command: int) -> bool:
-    return any(int(item) == int(command) for item in READ_COMMANDS)
+    return command in READ_COMMANDS
 
 
 def is_stream_read_command(command: int) -> bool:
-    return any(int(item) == int(command) for item in STREAM_READ_COMMANDS)
+    return command in STREAM_READ_COMMANDS
 
 
 @dataclass
