@@ -1,6 +1,31 @@
 from dataclasses import dataclass
+from typing import Optional, Protocol
 
 from sparam import DataType, Device, Variable
+
+
+class ReadDevice(Protocol):
+    @property
+    def last_error(self) -> str:
+        ...
+
+    def read_value(self, variable: Variable, timeout: float = 1.0) -> Optional[bytes]:
+        ...
+
+
+class WriteDevice(Protocol):
+    @property
+    def last_error(self) -> str:
+        ...
+
+    def write_single(
+        self,
+        variable: Variable,
+        value_bytes: bytes,
+        timeout: float = 1.0,
+        dtype_override: Optional[DataType] = None,
+    ) -> bool:
+        ...
 
 
 @dataclass
@@ -15,7 +40,7 @@ class IOResult:
 class IOController:
     def read_once(
         self,
-        device: Device,
+        device: ReadDevice,
         variable: Variable,
         fallback_dtype: DataType,
         timeout: float = 1.0,
@@ -59,7 +84,7 @@ class IOController:
 
     def write_once(
         self,
-        device: Device,
+        device: WriteDevice,
         variable: Variable,
         raw_text: str,
         dtype: DataType,

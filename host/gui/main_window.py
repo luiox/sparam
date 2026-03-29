@@ -467,6 +467,13 @@ class MainWindow(QMainWindow):
         self.conn = result.conn
         self.device = result.device
         self.device_manager = result.device_manager
+        if self.conn is None or self.device is None or self.device_manager is None:
+            self._log("CONNECT FAIL: connection result incomplete")
+            QMessageBox.warning(self, "Connection", "Connection setup failed.")
+            self.conn = None
+            self.device = None
+            self.device_manager = None
+            return
         self.bridge = DeviceBridge()
         self.device_manager.add_callback(self.bridge.emit_sample)
         self.bridge.sample_received.connect(self._on_sample_received)

@@ -1,7 +1,27 @@
 from dataclasses import dataclass
-from typing import Optional
+from typing import Optional, Protocol
 
 from sparam import Device, DeviceManager, ElfParser, SerialConnection
+
+
+class ConnectionLike(Protocol):
+    @property
+    def last_error(self) -> str:
+        ...
+
+    def open(self) -> bool:
+        ...
+
+    def close(self) -> None:
+        ...
+
+    def is_open(self) -> bool:
+        ...
+
+
+class MonitorManagerLike(Protocol):
+    def stop_monitor(self) -> bool:
+        ...
 
 
 @dataclass
@@ -53,8 +73,8 @@ class ConnectionController:
 
     def disconnect(
         self,
-        conn: Optional[SerialConnection],
-        device_manager: Optional[DeviceManager],
+        conn: Optional[ConnectionLike],
+        device_manager: Optional[MonitorManagerLike],
     ) -> None:
         if device_manager:
             device_manager.stop_monitor()

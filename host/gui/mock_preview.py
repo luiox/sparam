@@ -35,7 +35,7 @@ class MockPreviewController:
         self.window._log("Loaded mock variables for UI preview.")
         for variable in self.variables:
             self.window._toggle_variable_monitor(variable.name)
-        self.window.monitor_active = True
+        self.window.monitor_state.active = True
         self.window._log("Mock preview stream started.")
 
     def start(self) -> None:

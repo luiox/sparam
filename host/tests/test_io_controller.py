@@ -21,7 +21,7 @@ class _FakeWriteDevice:
     def __init__(self, ok: bool, error: str = "") -> None:
         self.ok = ok
         self.last_error = error
-        self.calls = []
+        self.calls: list[tuple[Variable, bytes, float, Optional[DataType]]] = []
 
     def write_single(
         self,

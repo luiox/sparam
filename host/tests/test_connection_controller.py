@@ -1,4 +1,5 @@
 from gui.controllers.connection_controller import ConnectionController
+from sparam.elf_parser import ElfParser
 
 
 class _FakeConnection:
@@ -48,8 +49,9 @@ class _FakeManager:
         self.device = device
         self.stopped = False
 
-    def stop_monitor(self) -> None:
+    def stop_monitor(self) -> bool:
         self.stopped = True
+        return True
 
 
 def test_connection_controller_connect_success() -> None:
@@ -61,7 +63,7 @@ def test_connection_controller_connect_success() -> None:
         device_cls=_FakeDevice,
         manager_cls=_FakeManager,
     )
-    result = controller.connect("COM1", 115200, 1, parser=object())
+    result = controller.connect("COM1", 115200, 1, parser=ElfParser())
 
     assert result.ok is True
     assert result.conn is not None
@@ -78,7 +80,7 @@ def test_connection_controller_connect_open_failure() -> None:
         device_cls=_FakeDevice,
         manager_cls=_FakeManager,
     )
-    result = controller.connect("COM1", 115200, 1, parser=object())
+    result = controller.connect("COM1", 115200, 1, parser=ElfParser())
 
     assert result.ok is False
     assert "unable to open" in result.error
@@ -93,7 +95,7 @@ def test_connection_controller_connect_ping_failure_closes_connection() -> None:
         device_cls=_FakeDevice,
         manager_cls=_FakeManager,
     )
-    result = controller.connect("COM1", 115200, 1, parser=object())
+    result = controller.connect("COM1", 115200, 1, parser=ElfParser())
 
     assert result.ok is False
     assert result.conn is None
