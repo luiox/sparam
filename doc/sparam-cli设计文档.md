@@ -10,6 +10,10 @@
 - 包：`host/sparam/`
 - 运行方式：`uv run sparam ...`
 
+运行环境：
+
+- host 侧 Python 基线版本为 3.10+
+
 依赖（节选）：
 
 - `click`：命令行参数解析
