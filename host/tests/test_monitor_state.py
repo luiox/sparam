@@ -31,3 +31,13 @@ def test_monitor_state_pause_and_reset() -> None:
     assert state.monitored_names == []
     assert state.active is False
     assert state.paused is False
+
+
+def test_monitor_state_reset_clears_active_and_paused_combo() -> None:
+    state = MonitorState(monitored_names=["speed", "current"], active=True, paused=True)
+
+    state.reset()
+
+    assert state.monitored_names == []
+    assert state.active is False
+    assert state.paused is False
