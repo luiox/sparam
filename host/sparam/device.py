@@ -4,7 +4,14 @@ from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 from .elf_parser import ElfParser, Variable
-from .protocol import CommandType, DataType, Frame, Protocol
+from .protocol import (
+    CommandType,
+    DataType,
+    Frame,
+    Protocol,
+    is_read_command,
+    is_stream_read_command,
+)
 from .serial_conn import SerialConnection
 from .socket_conn import SocketConnection
 
@@ -170,13 +177,7 @@ class Device:
             response = self._send_and_wait_filtered(
                 data,
                 timeout,
-                accept=lambda f: (
-                    (
-                        f.command >= CommandType.READ_SINGLE
-                        and f.command <= CommandType.READ_500MS
-                    )
-                    or f.is_nack()
-                ),
+                accept=lambda f: is_read_command(f.command) or f.is_nack(),
             )
 
             results: Dict[str, bytes] = {}
@@ -291,10 +292,7 @@ class Device:
         return False
 
     def on_frame_received(self, frame: Frame) -> None:
-        if (
-            frame.command >= CommandType.READ_1MS
-            and frame.command <= CommandType.READ_500MS
-        ):
+        if is_stream_read_command(frame.command):
             parsed = Protocol.decode_read_response(frame)
 
             for addr, value in parsed:

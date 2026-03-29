@@ -50,6 +50,11 @@ sparam/
 - [doc/sparam-gui设计文档.md](doc/sparam-gui设计文档.md)
 - [doc/sparam-cli设计文档.md](doc/sparam-cli设计文档.md)
 
+## Host 开发环境
+
+- 上位机开发推荐 Python 3.10 及以上版本
+- `host/` 目录使用 `uv` 管理依赖与虚拟环境
+
 ## 许可证
 
 MIT License

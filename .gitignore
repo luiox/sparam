@@ -65,3 +65,4 @@ dkms.conf
 /host/.venv/
 /.xmake
 *.log
+/host/gui/controllers/__pycache__

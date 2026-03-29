@@ -3,7 +3,7 @@ name = "sparam"
 version = "0.1.0"
 description = "Simple parameter monitoring and calibration tool for MCU"
 readme = "README.md"
-requires-python = ">=3.8"
+requires-python = ">=3.10"
 dependencies = [
     "pyserial>=3.5",
     "pyelftools>=0.29",
@@ -49,7 +49,7 @@ skip-magic-trailing-comma = false
 line-ending = "lf"
 
 [tool.mypy]
-python_version = "3.9"
+python_version = "3.10"
 pretty = true
 show_error_codes = true
 warn_unused_configs = true

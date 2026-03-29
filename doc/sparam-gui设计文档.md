@@ -9,6 +9,7 @@
 ```
 host/gui/
 ├── __init__.py
+├── controllers/
 ├── main.py
 ├── main_window.py
 ├── mock_preview.py
@@ -19,6 +20,8 @@ host/gui/
 关键职责：
 
 - `main_window.py`：主窗口与布局编排、设备联动
+- `controllers/connection_controller.py`：连接/断开流程编排与错误收敛
+- `controllers/io_controller.py`：单次读写值转换、设备调用与错误收敛
 - `widgets/sidebar.py`：连接/监测/单次读写/变量列表交互
 - `widgets/waveform_plot.py`：实时波形渲染
 - `styles/catppuccin.py`：样式主题
@@ -105,6 +108,23 @@ host/gui/
 - 布局恢复加入版本门控与可见区域夹紧，降低几何异常风险。
 - 运行时诊断日志落盘到 `host/sparam_gui_runtime.log`，记录 Qt 消息与未处理异常。
 - 串口接收线程生命周期与监测流程绑定，降低 Windows 下 read/close 并发崩溃风险。
+
+### 5.7 可维护性重构（Issue #6）
+
+- 监测状态从 `MainWindow` 内联字段抽离为 `sparam/monitor_state.py`，统一管理：
+	- `monitored_names`
+	- `active`
+	- `paused`
+- `MainWindow` 保留 UI 编排职责，连接与单次读写流程下沉到控制器：
+	- `ConnectionController` 负责连接建立、Ping 校验、断开清理
+	- `IOController` 负责 Read Once / Write Once 的值转换与错误路径
+- 以上改造保持 UI 行为兼容，同时降低窗口类职责密度和测试耦合。
+
+### 5.8 GUI 相关测试补强
+
+- 新增 `host/tests/test_connection_controller.py`：覆盖连接成功、打开失败、Ping 失败、断开清理。
+- 新增 `host/tests/test_io_controller.py`：覆盖读写成功、无效输入、设备错误路径。
+- 既有 GUI 交互与布局测试保持通过。
 
 ## 6. 风险与验证点
 

@@ -1,7 +1,7 @@
 import struct
 from dataclasses import dataclass
 from enum import IntEnum
-from typing import List, Optional, Tuple
+from typing import Dict, List, Optional, Set, Tuple
 
 import crcmod.predefined
 
@@ -36,29 +36,76 @@ class DataType(IntEnum):
 
     @property
     def size(self) -> int:
-        sizes = {
-            DataType.UINT8: 1,
-            DataType.INT8: 1,
-            DataType.UINT16: 2,
-            DataType.INT16: 2,
-            DataType.UINT32: 4,
-            DataType.INT32: 4,
-            DataType.FLOAT: 4,
-        }
-        return sizes[self]
+        return DATA_TYPE_REGISTRY[self].size
 
     @property
     def format_char(self) -> str:
-        formats = {
-            DataType.UINT8: "<B",
-            DataType.INT8: "<b",
-            DataType.UINT16: "<H",
-            DataType.INT16: "<h",
-            DataType.UINT32: "<I",
-            DataType.INT32: "<i",
-            DataType.FLOAT: "<f",
-        }
-        return formats[self]
+        return DATA_TYPE_REGISTRY[self].format_char
+
+
+@dataclass(frozen=True)
+class DataTypeDef:
+    label: str
+    size: int
+    format_char: str
+    c_aliases: List[str]
+
+
+DATA_TYPE_REGISTRY: Dict[DataType, DataTypeDef] = {
+    DataType.UINT8: DataTypeDef(
+        label="uint8",
+        size=1,
+        format_char="<B",
+        c_aliases=["uint8_t", "unsigned char"],
+    ),
+    DataType.INT8: DataTypeDef(
+        label="int8",
+        size=1,
+        format_char="<b",
+        c_aliases=["int8_t", "signed char"],
+    ),
+    DataType.UINT16: DataTypeDef(
+        label="uint16",
+        size=2,
+        format_char="<H",
+        c_aliases=["uint16_t", "unsigned short"],
+    ),
+    DataType.INT16: DataTypeDef(
+        label="int16",
+        size=2,
+        format_char="<h",
+        c_aliases=["int16_t", "short"],
+    ),
+    DataType.UINT32: DataTypeDef(
+        label="uint32",
+        size=4,
+        format_char="<I",
+        c_aliases=["uint32_t", "unsigned int"],
+    ),
+    DataType.INT32: DataTypeDef(
+        label="int32",
+        size=4,
+        format_char="<i",
+        c_aliases=["int32_t", "int"],
+    ),
+    DataType.FLOAT: DataTypeDef(
+        label="float",
+        size=4,
+        format_char="<f",
+        c_aliases=["float"],
+    ),
+}
+
+CLI_TYPE_TO_DATA_TYPE: Dict[str, DataType] = {
+    defn.label: dtype for dtype, defn in DATA_TYPE_REGISTRY.items()
+}
+CLI_TYPE_CHOICES: Tuple[str, ...] = tuple(CLI_TYPE_TO_DATA_TYPE.keys())
+
+C_TYPE_TO_DATA_TYPE: Dict[str, DataType] = {}
+for dtype, defn in DATA_TYPE_REGISTRY.items():
+    aliases = [defn.label] + defn.c_aliases
+    for alias in aliases:
+        C_TYPE_TO_DATA_TYPE[alias.lower()] = dtype
 
 
 class ErrorCode(IntEnum):
@@ -79,6 +126,45 @@ SAMPLE_RATES = {
     7: 200,
     8: 500,
 }
+
+READ_RATE_TO_COMMAND: Dict[int, CommandType] = {
+    0: CommandType.READ_SINGLE,
+    1: CommandType.READ_1MS,
+    2: CommandType.READ_5MS,
+    3: CommandType.READ_10MS,
+    4: CommandType.READ_20MS,
+    5: CommandType.READ_50MS,
+    6: CommandType.READ_100MS,
+    7: CommandType.READ_200MS,
+    8: CommandType.READ_500MS,
+}
+READ_COMMANDS: Set[CommandType] = set(READ_RATE_TO_COMMAND.values())
+STREAM_READ_COMMANDS: Set[CommandType] = {
+    command for rate, command in READ_RATE_TO_COMMAND.items() if rate > 0
+}
+MIN_MONITOR_RATE = min(rate for rate in SAMPLE_RATES if rate > 0)
+MAX_MONITOR_RATE = max(rate for rate in SAMPLE_RATES if rate > 0)
+SAMPLE_RATE_HELP_TEXT = ", ".join(
+    f"{rate}={interval}ms"
+    for rate, interval in SAMPLE_RATES.items()
+    if rate > 0 and interval is not None
+)
+
+
+def read_command_for_rate(rate: int) -> CommandType:
+    command = READ_RATE_TO_COMMAND.get(rate)
+    if command is None:
+        raise ValueError(f"Unsupported monitor rate: {rate}")
+    return command
+
+
+def is_read_command(command: int) -> bool:
+    # Set lookup keeps read-command checks O(1) in hot paths.
+    return command in READ_COMMANDS
+
+
+def is_stream_read_command(command: int) -> bool:
+    return command in STREAM_READ_COMMANDS
 
 
 @dataclass
@@ -144,11 +230,7 @@ class Protocol:
 
     @classmethod
     def encode_read(cls, device_id: int, addresses: List[int], rate: int = 0) -> bytes:
-        command: int
-        if rate == 0:
-            command = CommandType.READ_SINGLE
-        else:
-            command = int(CommandType.READ_SINGLE) + rate
+        command = read_command_for_rate(rate)
 
         data = b"".join(struct.pack("<I", addr) for addr in addresses)
         return cls.encode(device_id, command, data)

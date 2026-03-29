@@ -7,6 +7,11 @@ from typing import Optional, TextIO, Tuple
 import click
 
 from sparam import (
+    CLI_TYPE_CHOICES,
+    CLI_TYPE_TO_DATA_TYPE,
+    MAX_MONITOR_RATE,
+    MIN_MONITOR_RATE,
+    SAMPLE_RATE_HELP_TEXT,
     DataType,
     Device,
     ElfParser,
@@ -149,7 +154,7 @@ def read(
     "-t",
     "var_type",
     default="float",
-    type=click.Choice(["uint8", "int8", "uint16", "int16", "uint32", "int32", "float"]),
+    type=click.Choice(CLI_TYPE_CHOICES),
     help="Data type",
 )
 @click.option("--timeout", default=1.0, help="Timeout in seconds")
@@ -163,16 +168,7 @@ def write(
     var_type: str,
     timeout: float,
 ) -> None:
-    type_map = {
-        "uint8": DataType.UINT8,
-        "int8": DataType.INT8,
-        "uint16": DataType.UINT16,
-        "int16": DataType.INT16,
-        "uint32": DataType.UINT32,
-        "int32": DataType.INT32,
-        "float": DataType.FLOAT,
-    }
-    dtype = type_map[var_type]
+    dtype = CLI_TYPE_TO_DATA_TYPE[var_type]
 
     conn = SerialConnection(port, baud, timeout)
     if not conn.open():
@@ -230,10 +226,8 @@ def stop(port: str, baud: int, device_id: int, timeout: float) -> None:
     "--rate",
     "-r",
     default=3,
-    type=click.IntRange(1, 8),
-    help=(
-        "Sample rate (1=1ms, 2=5ms, 3=10ms, 4=20ms, 5=50ms, 6=100ms, 7=200ms, 8=500ms)"
-    ),
+    type=click.IntRange(MIN_MONITOR_RATE, MAX_MONITOR_RATE),
+    help=f"Sample rate ({SAMPLE_RATE_HELP_TEXT})",
 )
 @click.option("--output", "-o", default=None, help="Output CSV file")
 @click.option("--count", "-c", default=0, help="Number of samples (0 for infinite)")

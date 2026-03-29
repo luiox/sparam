@@ -4,6 +4,8 @@ Python host tools for sparam, including protocol encoding/decoding, device commu
 
 ## Development
 
+- Python baseline: 3.10+
+- Create or refresh virtualenv with Python 3.10: `uv venv --python 3.10 .venv`
 - Install dependencies (core + dev + test + gui): `uv sync --extra dev --extra test --extra gui`
 - Format code: `uv run --extra dev ruff format .`
 - Run linter: `uv run --extra dev ruff check .`
