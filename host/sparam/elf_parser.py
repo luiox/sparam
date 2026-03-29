@@ -15,7 +15,8 @@ class Variable:
     @property
     def dtype_code(self) -> int:
         normalized = self.var_type.strip().lower()
-        return int(C_TYPE_TO_DATA_TYPE.get(normalized, DataType.UINT32))
+        # DataType inherits from IntEnum, so it can be used directly as an int code.
+        return C_TYPE_TO_DATA_TYPE.get(normalized, DataType.UINT32)
 
 
 class ElfParser:

@@ -670,7 +670,7 @@ class MainWindow(QMainWindow):
         self._resume_stream_after_single_io(was_streaming)
 
         if not result.ok:
-            if result.error.startswith("Invalid value:"):
+            if result.error_type == "invalid_input":
                 self._log(f"WRITE FAIL {variable.name}: {result.error}")
                 QMessageBox.warning(self, "Write Once", result.error)
                 return

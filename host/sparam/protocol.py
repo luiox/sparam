@@ -36,66 +36,74 @@ class DataType(IntEnum):
 
     @property
     def size(self) -> int:
-        return DATA_TYPE_REGISTRY[self]["size"]
+        return DATA_TYPE_REGISTRY[self].size
 
     @property
     def format_char(self) -> str:
-        return DATA_TYPE_REGISTRY[self]["format_char"]
+        return DATA_TYPE_REGISTRY[self].format_char
 
 
-DATA_TYPE_REGISTRY: Dict[DataType, Dict[str, object]] = {
-    DataType.UINT8: {
-        "label": "uint8",
-        "size": 1,
-        "format_char": "<B",
-        "c_aliases": ["uint8_t", "unsigned char"],
-    },
-    DataType.INT8: {
-        "label": "int8",
-        "size": 1,
-        "format_char": "<b",
-        "c_aliases": ["int8_t", "signed char"],
-    },
-    DataType.UINT16: {
-        "label": "uint16",
-        "size": 2,
-        "format_char": "<H",
-        "c_aliases": ["uint16_t", "unsigned short"],
-    },
-    DataType.INT16: {
-        "label": "int16",
-        "size": 2,
-        "format_char": "<h",
-        "c_aliases": ["int16_t", "short"],
-    },
-    DataType.UINT32: {
-        "label": "uint32",
-        "size": 4,
-        "format_char": "<I",
-        "c_aliases": ["uint32_t", "unsigned int"],
-    },
-    DataType.INT32: {
-        "label": "int32",
-        "size": 4,
-        "format_char": "<i",
-        "c_aliases": ["int32_t", "int"],
-    },
-    DataType.FLOAT: {
-        "label": "float",
-        "size": 4,
-        "format_char": "<f",
-        "c_aliases": ["float"],
-    },
+@dataclass(frozen=True)
+class DataTypeDef:
+    label: str
+    size: int
+    format_char: str
+    c_aliases: List[str]
+
+
+DATA_TYPE_REGISTRY: Dict[DataType, DataTypeDef] = {
+    DataType.UINT8: DataTypeDef(
+        label="uint8",
+        size=1,
+        format_char="<B",
+        c_aliases=["uint8_t", "unsigned char"],
+    ),
+    DataType.INT8: DataTypeDef(
+        label="int8",
+        size=1,
+        format_char="<b",
+        c_aliases=["int8_t", "signed char"],
+    ),
+    DataType.UINT16: DataTypeDef(
+        label="uint16",
+        size=2,
+        format_char="<H",
+        c_aliases=["uint16_t", "unsigned short"],
+    ),
+    DataType.INT16: DataTypeDef(
+        label="int16",
+        size=2,
+        format_char="<h",
+        c_aliases=["int16_t", "short"],
+    ),
+    DataType.UINT32: DataTypeDef(
+        label="uint32",
+        size=4,
+        format_char="<I",
+        c_aliases=["uint32_t", "unsigned int"],
+    ),
+    DataType.INT32: DataTypeDef(
+        label="int32",
+        size=4,
+        format_char="<i",
+        c_aliases=["int32_t", "int"],
+    ),
+    DataType.FLOAT: DataTypeDef(
+        label="float",
+        size=4,
+        format_char="<f",
+        c_aliases=["float"],
+    ),
 }
 
 CLI_TYPE_TO_DATA_TYPE: Dict[str, DataType] = {
-    str(defn["label"]): dtype for dtype, defn in DATA_TYPE_REGISTRY.items()
+    defn.label: dtype for dtype, defn in DATA_TYPE_REGISTRY.items()
 }
 CLI_TYPE_CHOICES: Tuple[str, ...] = tuple(CLI_TYPE_TO_DATA_TYPE.keys())
 
 C_TYPE_TO_DATA_TYPE: Dict[str, DataType] = {}
 for dtype, defn in DATA_TYPE_REGISTRY.items():
-    aliases = [str(defn["label"])] + [str(alias) for alias in defn["c_aliases"]]
+    aliases = [defn.label] + defn.c_aliases
     for alias in aliases:
         C_TYPE_TO_DATA_TYPE[alias.lower()] = dtype
 
@@ -151,6 +159,7 @@ def read_command_for_rate(rate: int) -> CommandType:
 
 
 def is_read_command(command: int) -> bool:
+    # Set lookup keeps read-command checks O(1) in hot paths.
     return command in READ_COMMANDS
 
 

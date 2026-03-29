@@ -42,6 +42,7 @@ def test_io_controller_read_once_decodes_integer_values() -> None:
 
     assert result.ok is True
     assert result.value_text == "42"
+    assert result.value_text_fallback is False
 
 
 def test_io_controller_read_once_reports_device_error() -> None:
@@ -52,6 +53,18 @@ def test_io_controller_read_once_reports_device_error() -> None:
 
     assert result.ok is False
     assert "timeout" in result.error
+    assert result.error_type == "device_error"
+
+
+def test_io_controller_read_once_marks_decode_fallback() -> None:
+    variable = Variable("speed", 0x20000000, 4, "uint32_t")
+    device = _FakeReadDevice(b"\x2A")
+
+    result = IOController().read_once(device, variable, DataType.FLOAT)
+
+    assert result.ok is True
+    assert result.value_text == "2a"
+    assert result.value_text_fallback is True
 
 
 def test_io_controller_write_once_handles_invalid_value() -> None:
@@ -62,6 +75,7 @@ def test_io_controller_write_once_handles_invalid_value() -> None:
 
     assert result.ok is False
     assert result.error.startswith("Invalid value:")
+    assert result.error_type == "invalid_input"
 
 
 def test_io_controller_write_once_passes_dtype_and_payload() -> None:
@@ -85,3 +99,4 @@ def test_io_controller_write_once_returns_device_failure() -> None:
 
     assert result.ok is False
     assert "nack" in result.error
+    assert result.error_type == "device_error"

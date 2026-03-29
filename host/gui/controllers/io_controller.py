@@ -8,6 +8,8 @@ class IOResult:
     ok: bool
     value_text: str = ""
     error: str = ""
+    error_type: str = ""
+    value_text_fallback: bool = False
 
 
 class IOController:
@@ -21,11 +23,19 @@ class IOController:
         try:
             value_bytes = device.read_value(variable, timeout=timeout)
         except Exception as exc:
-            return IOResult(ok=False, error=f"{variable.name} failed ({exc})")
+            return IOResult(
+                ok=False,
+                error=f"{variable.name} failed ({exc})",
+                error_type="device_error",
+            )
 
         if value_bytes is None:
             error_reason = device.last_error or "unknown error"
-            return IOResult(ok=False, error=f"{variable.name} failed ({error_reason})")
+            return IOResult(
+                ok=False,
+                error=f"{variable.name} failed ({error_reason})",
+                error_type="device_error",
+            )
 
         try:
             dtype = (
@@ -40,7 +50,12 @@ class IOController:
                 shown = str(int(value))
             return IOResult(ok=True, value_text=shown)
         except Exception:
-            return IOResult(ok=True, value_text=value_bytes.hex())
+            # Fall back to raw bytes text so one-shot read remains usable.
+            return IOResult(
+                ok=True,
+                value_text=value_bytes.hex(),
+                value_text_fallback=True,
+            )
 
     def write_once(
         self,
@@ -56,7 +71,11 @@ class IOController:
             )
             value_bytes = Device.value_to_bytes(typed_value, dtype)
         except Exception as exc:
-            return IOResult(ok=False, error=f"Invalid value: {exc}")
+            return IOResult(
+                ok=False,
+                error=f"Invalid value: {exc}",
+                error_type="invalid_input",
+            )
 
         try:
             ok = device.write_single(
@@ -66,10 +85,18 @@ class IOController:
                 dtype_override=dtype,
             )
         except Exception as exc:
-            return IOResult(ok=False, error=f"{variable.name} failed ({exc})")
+            return IOResult(
+                ok=False,
+                error=f"{variable.name} failed ({exc})",
+                error_type="device_error",
+            )
 
         if not ok:
             error_reason = device.last_error or "unknown error"
-            return IOResult(ok=False, error=f"{variable.name} failed ({error_reason})")
+            return IOResult(
+                ok=False,
+                error=f"{variable.name} failed ({error_reason})",
+                error_type="device_error",
+            )
 
         return IOResult(ok=True)
