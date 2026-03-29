@@ -23,6 +23,7 @@ from sparam import (
     Device,
     DeviceManager,
     ElfParser,
+    MonitorState,
     MonitorStore,
     SamplePoint,
     SerialConnection,
@@ -117,10 +118,8 @@ class MainWindow(QMainWindow):
         self.device_manager: Optional[DeviceManager] = None
         self.bridge: Optional[DeviceBridge] = None
         self.store = MonitorStore(max_points=1200)
-        self.monitored_names: List[str] = []
+        self.monitor_state = MonitorState()
         self.cards: Dict[str, ValueCard] = {}
-        self.monitor_active = False
-        self.monitor_paused = False
         self.connection_fields: Dict[str, QLabel] = {}
         self.monitor_fields: Dict[str, QLabel] = {}
         self.settings = settings or QSettings(self.SETTINGS_ORG, self.SETTINGS_APP)
@@ -131,6 +130,11 @@ class MainWindow(QMainWindow):
         self._build_ui()
         self._restore_window_layout()
         self._refresh_ports()
+
+    @property
+    def monitored_names(self) -> List[str]:
+        # Keep compatibility for tests and existing callers.
+        return self.monitor_state.monitored_names
 
     def _build_ui(self) -> None:
         root = QWidget(self)
@@ -486,7 +490,7 @@ class MainWindow(QMainWindow):
         self.device = None
         self.device_manager = None
         self.bridge = None
-        self.monitor_active = False
+        self.monitor_state.reset()
         self.toolbar.set_connected(False)
         self.sidebar.set_connected(False)
         self._log("Disconnected.")
@@ -528,10 +532,12 @@ class MainWindow(QMainWindow):
 
     def _add_variable_monitor(self, name: str) -> None:
         variable = self.parser.get_variable(name)
-        if not variable or name in self.monitored_names:
+        if not variable:
             return
 
-        self.monitored_names.append(name)
+        if not self.monitor_state.add_monitored(name):
+            return
+
         color = self._series_color_for(name)
         self.sidebar.set_monitored(name, True)
         self.waveform.add_variable(name, color)
@@ -541,10 +547,9 @@ class MainWindow(QMainWindow):
         self._schedule_monitor_restart()
 
     def _remove_variable_monitor(self, name: str) -> None:
-        if name not in self.monitored_names:
+        if not self.monitor_state.remove_monitored(name):
             return
 
-        self.monitored_names = [item for item in self.monitored_names if item != name]
         self.sidebar.set_monitored(name, False)
         self.waveform.remove_variable(name)
         self._remove_card(name)
@@ -553,16 +558,13 @@ class MainWindow(QMainWindow):
         self._schedule_monitor_restart()
 
     def _toggle_variable_monitor(self, name: str) -> None:
-        if name in self.monitored_names:
+        if name in self.monitor_state.monitored_names:
             self._remove_variable_monitor(name)
         else:
             self._add_variable_monitor(name)
 
     def _series_color_for(self, name: str) -> str:
-        if name in self.monitored_names:
-            index = self.monitored_names.index(name)
-        else:
-            index = len(self.monitored_names)
+        index = self.monitor_state.series_index(name)
         return SERIES_COLORS[index % len(SERIES_COLORS)]
 
     def _ensure_card(self, name: str, color: str) -> None:
@@ -580,11 +582,11 @@ class MainWindow(QMainWindow):
         card.deleteLater()
 
     def _toggle_pause(self) -> None:
-        self.monitor_paused = not self.monitor_paused
-        self.waveform.set_paused(self.monitor_paused)
-        self.toolbar.set_paused(self.monitor_paused)
-        self.sidebar.set_paused(self.monitor_paused)
-        self._log("Monitor paused." if self.monitor_paused else "Monitor resumed.")
+        paused = self.monitor_state.toggle_paused()
+        self.waveform.set_paused(paused)
+        self.toolbar.set_paused(paused)
+        self.sidebar.set_paused(paused)
+        self._log("Monitor paused." if paused else "Monitor resumed.")
         self._refresh_summary_cards()
 
     def _set_time_window(self, label: str) -> None:
@@ -613,10 +615,10 @@ class MainWindow(QMainWindow):
         return self.parser.get_variable(name)
 
     def _pause_stream_for_single_io(self) -> bool:
-        was_streaming = bool(self.device_manager and self.monitor_active)
+        was_streaming = bool(self.device_manager and self.monitor_state.active)
         if was_streaming and self.device_manager:
             self.device_manager.stop_monitor()
-            self.monitor_active = False
+            self.monitor_state.stop_streaming()
             self._refresh_summary_cards()
         return was_streaming
 
@@ -723,15 +725,15 @@ class MainWindow(QMainWindow):
         self._log(f"WRITE {variable.name} <= {raw_text} ({dtype.name})")
 
     def _restart_monitoring_if_needed(self) -> None:
-        if not self.device_manager or not self.monitored_names:
+        if not self.device_manager or not self.monitor_state.monitored_names:
             if self.device_manager:
                 self.device_manager.stop_monitor()
-            self.monitor_active = False
+            self.monitor_state.stop_streaming()
             self._refresh_summary_cards()
             return
 
         variables = []
-        for name in self.monitored_names:
+        for name in self.monitor_state.monitored_names:
             variable = self.parser.get_variable(name)
             if variable is not None:
                 variables.append(variable)
@@ -739,11 +741,12 @@ class MainWindow(QMainWindow):
             return
 
         self.device_manager.stop_monitor()
-        self.monitor_active = self.device_manager.start_monitor(
+        monitor_active = self.device_manager.start_monitor(
             variables,
             self.RATE_OPTIONS[self.sidebar.current_rate_label()],
         )
-        if self.monitor_active:
+        self.monitor_state.set_active(monitor_active)
+        if monitor_active:
             self._log(
                 "Streaming "
                 f"{len(variables)} variable(s) at "
@@ -754,7 +757,7 @@ class MainWindow(QMainWindow):
         self._refresh_summary_cards()
 
     def _on_sample_received(self, name: str, timestamp: float, value: float) -> None:
-        if self.monitor_paused:
+        if self.monitor_state.paused:
             return
         self.store.append(name, timestamp, value)
         card = self.cards.get(name)
@@ -815,12 +818,14 @@ class MainWindow(QMainWindow):
             Path(self.current_symbol_path).name if self.current_symbol_path else "None"
         )
 
-        self.monitor_fields["Variables"].setText(str(len(self.monitored_names)))
+        self.monitor_fields["Variables"].setText(
+            str(len(self.monitor_state.monitored_names))
+        )
         self.monitor_fields["Rate"].setText(self.sidebar.current_rate_label())
         self.monitor_fields["Window"].setText(self.sidebar.window_combo.currentText())
-        if self.monitor_paused:
+        if self.monitor_state.paused:
             mode = "Paused"
-        elif self.monitor_active:
+        elif self.monitor_state.active:
             mode = "Streaming"
         elif self.device:
             mode = "Armed"

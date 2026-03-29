@@ -1,6 +1,7 @@
 from .device import Device, Variable
 from .device_manager import DeviceManager, SamplePoint
 from .elf_parser import ElfParser
+from .monitor_state import MonitorState
 from .monitor_store import MonitorStore, TimeSeries
 from .protocol import CommandType, DataType, ErrorCode, Protocol
 from .serial_conn import SerialConnection
@@ -18,6 +19,7 @@ __all__ = [
     "Variable",
     "DeviceManager",
     "SamplePoint",
+    "MonitorState",
     "MonitorStore",
     "TimeSeries",
 ]
